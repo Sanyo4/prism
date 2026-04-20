@@ -91,7 +91,7 @@ At the start of **every slice**, fetch the current docs for that slice's librari
 | UI | Flutter (stable) | `api.flutter.dev`, `flutter.dev` via WebFetch |
 | Playback | `just_audio` | Context7 MCP (`query-docs`), pub.dev |
 | Session / notifications | `audio_service` | Context7, pub.dev |
-| Tag reading | `audiotags` | Context7, pub.dev |
+| Tag reading | `audio_metadata_reader` | Context7, pub.dev |
 | DB | `sqflite` + `sqlite3_flutter_libs` | Context7 |
 | Vector search | `sqlite-vec` via FFI | `github.com/asg017/sqlite-vec` README + quickstart |
 | Palette | `palette_generator` | Context7 |

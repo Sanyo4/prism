@@ -1,0 +1,24 @@
+name: prism
+
+packages:
+  - apps/*
+  - packages/*
+
+scripts:
+  analyze:
+    description: Run `dart analyze --fatal-infos` across every package with a lib/ dir.
+    run: dart analyze --fatal-infos
+    packageFilters:
+      dirExists: lib
+
+  test:
+    description: Run `dart test` across every package that has a test/ dir.
+    run: dart test
+    packageFilters:
+      dirExists: test
+
+  format:
+    description: Format every package (check only, fails if not idempotent).
+    run: dart format --output=none --set-exit-if-changed .
+    packageFilters:
+      dirExists: lib

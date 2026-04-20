@@ -82,15 +82,19 @@ package). Leave theming on defaults; slice 7 re-derives theme.
 
 - `mcp__plugin_context7_context7__resolve-library-id libraryName: "just_audio"`
 - `mcp__plugin_context7_context7__query-docs` with
-  `topic: "ConcatenatingAudioSource gapless setVolume seek setAudioSource"`.
+  `topic: "setAudioSources addAudioSource insertAudioSource moveAudioSource removeAudioSourceAt gapless setVolume seek playlist"`.
 
-**API summary reminder:** `AudioPlayer` is core.
-`ConcatenatingAudioSource(children: [...])` gives gapless chained
-playback. `setAudioSource(...)` swaps source; `setVolume(double)`
-takes 0.0–1.0 (map RG dB → linear via `pow(10, db / 20)`).
-`positionStream / durationStream / playerStateStream /
+**API summary reminder:** `AudioPlayer` is core. `just_audio`
+0.10.0+ deprecated `ConcatenatingAudioSource`; the current playlist
+API is `player.setAudioSources(List<AudioSource>, initialIndex:
+…)` and list mutators are methods on `AudioPlayer` itself:
+`addAudioSource / insertAudioSource(i, src) / removeAudioSourceAt(i)
+/ moveAudioSource(from, to)`. Still gapless, still chained.
+`setVolume(double)` takes 0.0–1.0 (map RG dB → linear via `pow(10,
+db / 20)`). `positionStream / durationStream / playerStateStream /
 currentIndexStream / sequenceStream` feed the UI.
 `LockCachingAudioSource` and `AudioLoadConfiguration` are out of scope.
+Minimum Flutter 3.27.
 
 ### `audio_service`
 
@@ -105,18 +109,26 @@ forwards `play / pause / seek / skipToNext / skipToPrevious` to
 Manifest needs `FOREGROUND_SERVICE_MEDIA_PLAYBACK` and
 `POST_NOTIFICATIONS`; the `<service>` block is merged by the plugin.
 
-### `audiotags`
+### `audio_metadata_reader`
 
-- `mcp__plugin_context7_context7__resolve-library-id libraryName: "audiotags"`
+- `mcp__plugin_context7_context7__resolve-library-id libraryName: "audio_metadata_reader"`
 - `mcp__plugin_context7_context7__query-docs` with
-  `topic: "AudioTags.read FLAC MP3 m4a ReplayGain custom tags"`.
+  `topic: "readMetadata readAllMetadata VorbisMetadata Mp3Metadata replayGainTrackGain customMetadata FLAC MP3 Vorbis ID3 TXXX"`.
 
-**API summary reminder:** `AudioTags.read(path)` returns a `Tag?` with
-`title / trackArtist / albumArtist / album / trackNumber / discNumber /
-year / genre / duration` + `pictures`. ReplayGain comes from Vorbis
-comments / ID3 `TXXX` frames via a generic key/value map — confirm
-accessor name during refresh (`Tag.customFields` vs `Tag.extended`
-shifted between versions).
+**API summary reminder:** Pure-Dart package (replaces `audiotags`
+1.4.5, which has no custom-tag accessor). Two entry points:
+`readMetadata(File)` returns a unified `AudioMetadata` with
+`title / artist / album / albumArtist / genre / year / trackNumber /
+discNumber / duration / pictures`, and `readAllMetadata(File,
+getImage: false)` returns a format-specific `ParserTag` —
+`VorbisMetadata` (FLAC / OGG / Opus) exposes dedicated
+`replayGainTrackGain / replayGainAlbumGain / replayGainTrackPeak /
+replayGainAlbumPeak` `List<String>` fields plus an `unknowns`
+map; `Mp3Metadata` exposes a `customMetadata: Map<String, String>`
+for TXXX frames (`customMetadata['REPLAYGAIN_TRACK_GAIN']`). M4A
+freeform iTunes atoms (`----:com.apple.iTunes:REPLAYGAIN_*`) are
+not exposed by slice 1's version — accept as a known gap and
+cover in slice 4 if real-world M4A rips demand it.
 
 ### `path_provider`
 
@@ -134,13 +146,18 @@ Linux is supported natively.
 
 - `mcp__plugin_context7_context7__resolve-library-id libraryName: "flutter_riverpod"`
 - `mcp__plugin_context7_context7__query-docs` with
-  `topic: "ProviderScope StreamProvider AsyncNotifierProvider ref.listen"`.
+  `topic: "ProviderScope StreamProvider NotifierProvider AsyncNotifierProvider ref.listen"`.
 
-**API summary reminder:** Slice 1 uses the non-generated API
-(`Provider`, `StreamProvider`, `StateNotifierProvider`,
-`AsyncNotifierProvider`). No `riverpod_generator` + `build_runner` in
-slice 1 — three providers don't justify codegen. Future migration is
-additive.
+**API summary reminder:** Slice 1 uses the non-generated API.
+Riverpod 3.0 moved `StateNotifier` / `StateNotifierProvider` /
+`StateProvider` / `ChangeNotifierProvider` to
+`package:flutter_riverpod/legacy.dart` and officially discourages
+them. Use `Notifier<T>` + `NotifierProvider<N, T>(N.new)` instead:
+the class overrides `build() → T` for initial state and mutates via
+`state = …` (same syntax as `StateNotifier`). `Provider`,
+`StreamProvider`, `FutureProvider`, `AsyncNotifierProvider` remain
+first-class. No `riverpod_generator` + `build_runner` in slice 1 —
+three providers don't justify codegen. Future migration is additive.
 
 ### `melos`
 
@@ -231,15 +248,16 @@ a Dart `Track` shape with the UI without pulling Flutter into tests.
 /packages/core/lib/src/scanner/scan_event.dart       # sealed union (Discovered/Skipped/Failed/Done)
 /packages/core/lib/src/scanner/cancellation_token.dart # isCancelled / cancel() flag
 /packages/core/lib/src/paths/audio_paths.dart        # extension set + default library root per platform
+/packages/core/lib/src/replay_gain.dart              # pure parseReplayGainDb + dbToLinear (no Flutter dep)
 /packages/core/test/scanner_test.dart                # unit tests against a temp dir fixture
+/packages/core/test/track_test.dart                  # Track identity + extension set coverage
+/packages/core/test/replay_gain_test.dart            # parseReplayGainDb + dbToLinear + Track.fromMetadata RG
 /packages/playback/pubspec.yaml                      # depends on core + just_audio + audio_service
 /packages/playback/lib/playback.dart                 # barrel export
 /packages/playback/lib/src/playback_service.dart     # wraps AudioPlayer; exposes streams
-/packages/playback/lib/src/queue_service.dart        # three-zone model + ConcatenatingAudioSource projection
+/packages/playback/lib/src/queue_service.dart        # three-zone model + setAudioSources projection
 /packages/playback/lib/src/queue_zone.dart           # enum { upcoming, playNext, history } + helpers
-/packages/playback/lib/src/replay_gain.dart          # pure dB→linear math + tag → gain resolver
 /packages/playback/test/queue_service_test.dart      # insert/move/clear invariants
-/packages/playback/test/replay_gain_test.dart        # tag parsing + db math
 ```
 
 No stub markdown beyond a two-line project root README. Files under
@@ -259,7 +277,16 @@ class Track {
   final double? replayGainTrackDb;      // parsed from tag, null if absent
   final double? replayGainAlbumDb;
   const Track({...});
-  factory Track.fromTag({required String path, required int mtimeMs, required Tag tag});
+  /// Reads standard fields from [AudioMetadata] and ReplayGain
+  /// dB from the format-specific [ParserTag] when available
+  /// (`VorbisMetadata.replayGainTrackGain`,
+  /// `Mp3Metadata.customMetadata['REPLAYGAIN_TRACK_GAIN']`, …).
+  factory Track.fromMetadata({
+    required String path,
+    required int mtimeMs,
+    required AudioMetadata meta,
+    ParserTag? raw,
+  });
 }
 ```
 
@@ -313,8 +340,9 @@ cross-references two streams.
 
 ```dart
 // packages/playback/lib/src/queue_service.dart
-class QueueService extends StateNotifier<QueueSnapshot> {
-  QueueService() : super(QueueSnapshot.empty());
+class QueueService extends Notifier<QueueSnapshot> {
+  @override
+  QueueSnapshot build() => QueueSnapshot.empty();
   void playNext(Track t);           // head of playNext zone
   void addToUpcoming(Track t);      // tail of upcoming zone
   void move(int from, int to);      // indices over the flat projection
@@ -386,28 +414,43 @@ one-line pass criterion. Stop at the criterion before the next step.
 
 4. **Implement `LibraryScanner`.** `async*` function: `await for`
    `Directory.list(recursive: true)`, filter by extension, call
-   `AudioTags.read(path)`, yield `ScanDiscovered(Track.fromTag(...))`;
-   catch per-file errors as `ScanFailed`. Between files, check
-   `token.isCancelled` and emit `ScanDone(cancelled: true)` then
-   return; else emit `ScanDone(cancelled: false, count: N)` after the
-   loop.
+   `readMetadata(File(path))` for standard fields and
+   `readAllMetadata(File(path), getImage: false)` for the
+   format-specific `ParserTag`, yield
+   `ScanDiscovered(Track.fromMetadata(...))`; catch per-file errors
+   as `ScanFailed`. Between files, check `token.isCancelled` and
+   emit `ScanDone(cancelled: true)` then return; else emit
+   `ScanDone(cancelled: false, count: N)` after the loop.
    **Pass:** `scanner_test.dart` seeds a temp dir with one valid MP3,
    one unreadable file, one non-audio file; asserts one `ScanDiscovered`,
    one `ScanFailed`, one `ScanSkipped`, one `ScanDone`. A second test
    cancels after the first event and expects `ScanDone(cancelled: true)`.
 
-5. **Wire ReplayGain tag parsing.** In `replay_gain.dart` write two
-   pure functions: `double? parseReplayGainDb(String raw)` (handles
-   `"+3.12 dB"`, `"-3.1"`, `"3.1dB"`) and `double dbToLinear(double db)
-   => pow(10, db / 20).toDouble()`. Extend `Track.fromTag` to read the
-   custom-field map for `REPLAYGAIN_TRACK_GAIN` + `_ALBUM_GAIN`.
-   **Pass:** `replay_gain_test.dart` checks
+5. **Wire ReplayGain tag parsing.** In
+   `packages/core/lib/src/replay_gain.dart` write two pure functions:
+   `double? parseReplayGainDb(String raw)` (handles `"+3.12 dB"`,
+   `"-3.1"`, `"3.1dB"`, `"3.1"`) and
+   `double dbToLinear(double db) => pow(10, db / 20).toDouble()`. Lives
+   in `core` (not `playback`) because `Track.fromMetadata` consumes it
+   and core must stay Flutter-free; `packages/playback` imports both
+   via `prism_core`'s barrel. Extend `Track.fromMetadata` to resolve
+   track/album gain by switching on the concrete parser-tag subtype:
+   `VorbisMetadata.replayGainTrackGain.firstOrNull` (FLAC / OGG /
+   Opus) and `Mp3Metadata.customMetadata['REPLAYGAIN_TRACK_GAIN']`
+   (MP3; case-insensitive to tolerate mp3gain / foobar2000 drift); any
+   other subtype or absent tag → `null`. Factory also back-fills
+   `albumArtist` from `Mp3Metadata.bandOrOrchestra` (TPE2) and
+   `VorbisMetadata.unknowns['ALBUMARTIST']` so slice 2's Albums browse
+   gets it for free.
+   **Pass:** `packages/core/test/replay_gain_test.dart` checks
    `parseReplayGainDb("+3.12 dB") == 3.12`, `dbToLinear(-6)` within
-   `1e-3` of `0.501`, and `Track.fromTag` on a synthesized `Tag`
-   populates `replayGainTrackDb`.
+   `1e-3` of `0.501`, and `Track.fromMetadata` on synthesized
+   `VorbisMetadata` and `Mp3Metadata` fixtures populates
+   `replayGainTrackDb` correctly.
 
-6. **Build `QueueService`.** `StateNotifier` with immutable
-   `QueueSnapshot`. Implement `playNext`, `addToUpcoming`, `move`,
+6. **Build `QueueService`.** Riverpod 3 `Notifier<QueueSnapshot>`
+   (`build()` returns `QueueSnapshot.empty()`; mutations via
+   `state = …`). Implement `playNext`, `addToUpcoming`, `move`,
    `clearPlayNext`, `advance`, `loadContext`. `QueueSnapshot.flat =
    [...history, current, ...playNext, ...upcoming]`.
    **Pass:** `queue_service_test.dart` verifies: (a) `playNext(t)`
@@ -419,13 +462,16 @@ one-line pass criterion. Stop at the criterion before the next step.
    PlayNext (preferred) or Upcoming.
 
 7. **Build `PlaybackService`.** Hold an `AudioPlayer`. On each
-   `QueueSnapshot` change, rebuild a `ConcatenatingAudioSource` from
+   `QueueSnapshot` change, build a `List<AudioSource>` from
    `snapshot.flat` (map each `Track.path` to
-   `AudioSource.uri(Uri.file(path))`), call `player.setAudioSource(src,
-   initialIndex: snapshot.currentIndex)`. `setVolume` from active
-   track's `replayGainTrackDb` when enabled, else 0 dB. Hook
+   `AudioSource.uri(Uri.file(path))`) and call
+   `player.setAudioSources(sources, initialIndex:
+   snapshot.currentIndex)`. `setVolume` from active track's
+   `replayGainTrackDb` when enabled, else 0 dB (= volume 1.0). Hook
    `currentIndexStream` to `QueueService.advance()` when the index
-   moves forward past current.
+   moves forward past current. Slice 5 will switch to diff-based
+   mutation via `insertAudioSource` / `moveAudioSource` /
+   `removeAudioSourceAt` for append-heavy radio flow.
    **Pass:** manual — 10 tracks play end-to-end with no audible pops.
 
 8. **Bridge `audio_service`.** `audio_handler.dart` extends
@@ -448,11 +494,12 @@ one-line pass criterion. Stop at the criterion before the next step.
 
 10. **Wire providers.** `playback_providers.dart`:
     `Provider<PlaybackService>` (eager, `ref.onDispose`),
-    `StateNotifierProvider<QueueService, QueueSnapshot>`, derived
-    `StreamProvider<Track?>` for Now Playing.
+    `NotifierProvider<QueueService, QueueSnapshot>(QueueService.new)`,
+    derived `StreamProvider<Track?>` for Now Playing.
     `library_providers.dart`: `FutureProvider<List<Track>>` consuming
     `LibraryScanner().scan(...)` to completion; `ScanFailed` events
-    fan out to `StateProvider<List<ScanFailed>>` for later UI.
+    fan out to a dedicated `Notifier<List<ScanFailed>>` (Riverpod 3
+    replacement for `StateProvider`) for later UI.
     **Pass:** `TracksScreen` renders a list; cold start completes in
     <3 s for a 500-track library on the Pixel 9 Pro Fold.
 
@@ -460,8 +507,15 @@ one-line pass criterion. Stop at the criterion before the next step.
     `tracksProvider` data. On tap: `ref.read(queueProvider.notifier)
     .loadContext(allTracks, startIndex: i)` then
     `ref.read(playbackServiceProvider).play()`. Each row shows
-    `title` / `artist — album` / `duration`.
-    **Pass:** tap-to-play works on both Linux and Android.
+    `title` / `artist — album` / `duration`. Each row's `onLongPress`
+    opens a Material 3 modal bottom sheet with `Play Next`
+    (`queueProvider.notifier.playNext(t)`) and `Add to Queue`
+    (`queueProvider.notifier.addToUpcoming(t)`); both actions close the
+    sheet and show a SnackBar. §11.8 depends on this menu — originally
+    missing from the step list; patched in.
+    **Pass:** tap-to-play works on both Linux and Android; long-press
+    opens the sheet and both actions land the track in the expected
+    `QueueScreen` zone.
 
 12. **Build `NowPlayingScreen`.** Watches `currentTrackStream`,
     `positionStream`, `durationStream`, `playerStateStream`. `Slider`
@@ -522,7 +576,7 @@ mechanism here.
 |---|---|---|
 | 1 | Partial scan cancellation leaves the app half-populated. | Scanner emits `ScanDone(cancelled: true)`; `libraryScanProvider` treats canceled scans as stale and keeps the previous complete list, with a snackbar note. |
 | 2 | Corrupted or unreadable tag on one file. | `AudioTags.read` throws → emit `ScanFailed(path, error)`, continue the walk. |
-| 3 | Android 13+ missing `POST_NOTIFICATIONS`. | Request via `audio_service`'s helper on first launch; if denied, playback still works but lockscreen controls do not. Slice 2 surfaces a Settings row to re-prompt. Slice 1 accepts one first-launch verification miss. |
+| 3 | Android 13+ missing `POST_NOTIFICATIONS`. | Request on first launch via `permission_handler`; if denied, playback still works but lockscreen controls do not. A later slice adds a Settings row to re-prompt. Slice 1 accepts one first-launch verification miss. |
 | 4 | ReplayGain tags absent (common with fresh CD rips). | `replayGainTrackDb == null` → `PlaybackService` applies 0 dB. Slice 4's measured RG backfills via sidecars. |
 | 5 | Libraries >10 k tracks block UI during scan. | Scanner streams through `StreamProvider` off the UI isolate. If single-isolate throughput proves insufficient (>2 s to first frame on Pixel), move the walk into `Isolate.run` in step 10 — accept — verify at runtime. |
 | 6 | Paths change between runs (device renamed, SD remount). | Slice 1 stores no path state. Default root is re-resolved per launch via `defaultLibraryRoot()`, falling back to `getApplicationDocumentsDirectory()` if neither known location is readable. |
@@ -530,6 +584,7 @@ mechanism here.
 | 8 | Foldable rotation / inner-outer transition resets playback UI. | `PlaybackService` lives in a root-scoped Riverpod provider, not widget lifecycle. Rotation re-reads streams; it does not dispose the player. |
 | 9 | `audio_service` notification channel missing on OEM Android skins. | Explicit `AudioServiceConfig.androidNotificationChannelId/Name` at init; confirm via `adb shell dumpsys notification`. |
 | 10 | Linux desktop without MPRIS DBus. | `audio_service` falls back to in-app transport surface. Accept — verify at runtime; Linux is a convenience target in slice 1. |
+| 11 | Android scoped storage (API 30+) blocks `dart:io` `Directory.list` on `/storage/emulated/0/Music`. | Request `MANAGE_EXTERNAL_STORAGE` ("All files access") at first launch via `permission_handler`; awaited in `main()` before `runApp` so the initial `tracksProvider` run sees a readable root. Play-Store-unfriendly; a later slice (not slice 2 as currently scoped) will migrate to SAF tree URIs. Unblocks §11 verification items 2, 4, 5, 6, 7, 8, 9, 11, 12 which all depend on a populated `TracksScreen` on the Pixel. |
 
 ## 11. Verification
 

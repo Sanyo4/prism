@@ -1,0 +1,19 @@
+name: prism_core
+description: >-
+  Prism core — pure-Dart models, library scanner, ReplayGain primitives, and
+  cancellation token. Zero Flutter imports: this package must build and test
+  under plain `dart` without the Flutter SDK.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.11.0
+
+resolution: workspace
+
+dependencies:
+  audio_metadata_reader: ^1.4.2
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^6.0.0

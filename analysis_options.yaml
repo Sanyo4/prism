@@ -1,0 +1,22 @@
+# Shared lints for the Prism workspace. Each package inherits from here
+# unless it ships its own `analysis_options.yaml` (e.g. `apps/mobile`
+# layers `flutter_lints` on top via its own file).
+include: package:lints/recommended.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+  errors:
+    # Let scaffolding commits land without TODO noise; slice 7's polish pass
+    # tightens this back up once the app has its full shape.
+    todo: ignore
+
+linter:
+  rules:
+    prefer_single_quotes: true
+    require_trailing_commas: true
+    unawaited_futures: true
+    cancel_subscriptions: true
+    close_sinks: true

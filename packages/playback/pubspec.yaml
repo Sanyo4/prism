@@ -1,0 +1,25 @@
+name: prism_playback
+description: >-
+  Prism playback — `just_audio` + `audio_service` wrapper, three-zone queue,
+  tag-embedded ReplayGain volume scaling. Consumed by `apps/mobile`.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.11.0
+  flutter: ">=3.27.0"
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  just_audio: ^0.10.5
+  audio_service: ^0.18.18
+  flutter_riverpod: ^3.0.1
+  prism_core: any
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
