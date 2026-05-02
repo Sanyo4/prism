@@ -3,7 +3,7 @@
 Paste the entire fenced block below into a fresh Claude Code chat opened
 against `/home/sanyo/Projects/music-player`.
 
-**Prerequisites:** slice 1 merged to `main`. `flutter doctor` green.
+**Prerequisites:** slice 1 merged to `master`. `flutter doctor` green.
 
 ---
 
@@ -22,7 +22,7 @@ Before doing anything else: confirm `apps/mobile/`, `packages/core/`, `packages/
 
 ## Before writing ANY Dart
 
-Slice 2 §4 lists docs to refresh: dio, sqflite, cached_network_image, palette_generator (used in slice 7 but cache schema lands here), plus three external API specs you must WebFetch — MusicBrainz API (musicbrainz.org/doc/MusicBrainz_API), Cover Art Archive (coverartarchive.org), and Last.fm API (last.fm/api). Your training data on the rate-limit headers, error envelope shapes, and current required-header rules will be stale. Write a ≤5-line "API summary" per source; keep in conversation, do not commit.
+Slice 2 §4 lists six docs to refresh: three external API specs you must WebFetch — MusicBrainz API (musicbrainz.org/doc/MusicBrainz_API), Cover Art Archive (coverartarchive.org), and Last.fm API (last.fm/api) — plus three pub.dev libraries you fetch via `mcp__plugin_context7_context7__resolve-library-id` + `query-docs`: `dio`, `cached_network_image`, `sqflite`. Your training data on the rate-limit headers, error envelope shapes, and current required-header rules will be stale. Write a ≤5-line "API summary" per source; keep in conversation, do not commit.
 
 ## Execution
 
@@ -31,7 +31,7 @@ Follow slice 2 §8 step-by-step. The file layout in §6 is fixed; the `packages/
 ## Hard constraints
 
 - **MusicBrainz: 1 req/sec, single global Pacer.** Hard-coded budget. CAA and Last.fm have separate informal budgets but no Pacer.
-- **Required User-Agent header on every MusicBrainz request:** `Prism/0.x ( <user contact email> )`. The contact email comes from a new Settings row this slice adds — use it as a hard precondition.
+- **Required User-Agent header on every MusicBrainz request:** `Prism/0.x ( <user contact email> )`. The contact email comes from a new Settings row this slice adds — use it as a hard precondition. For development, the user's email is `sanays.mail@gmail.com`.
 - **Read-only HTTP only.** No MusicBrainz write-back. No acoustid fingerprinting. No local mirror. No cover-art override (that's slice 4).
 - **No mood chips, no LLM, no Random tab seeded ordering beyond a per-section seed.** Mood chips ship in slice 4; LLM in slice 6; Random uses client-side `Random` only — no `ORDER BY RANDOM()`.
 - **Backfill is post-scan, single-track, off the UI thread.** Patch stream nudges the in-memory `Track` set; browse rows update in place.
