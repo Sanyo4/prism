@@ -43,6 +43,10 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Indexer test fixtures — generated on demand from ffmpeg by
+# tests/conftest.py, never committed (deterministic + regenerable).
+apps/indexer/tests/fixtures/library/
+
 # OS
 .DS_Store
 Thumbs.db

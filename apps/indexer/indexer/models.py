@@ -94,7 +94,13 @@ MUSICNN_PIN: ModelPin = ModelPin(
         "msd-musicnn-1.pb"
     ),
     mirror_urls=(),
-    sha256="",  # Filled in by Phase B once the model is downloaded.
+    # Computed via `sha256sum msd-musicnn-1.pb` after two independent
+    # downloads from essentia.upf.edu (Phase B verification: digests
+    # matched on both pulls). The hash is the load-bearing security
+    # control — a future upstream rotation that changes the weights
+    # makes the indexer fail closed; bumping the pin is a deliberate
+    # source change.
+    sha256="cdea0722bcee7f731286843f2233e3aa69887bb5c3e2dce011eff55f38d04f3e",
     relpath="msd-musicnn-1.pb",
 )
 
@@ -105,8 +111,39 @@ EFFNET_PIN: ModelPin = ModelPin(
         "discogs-effnet-bs64-1.pb"
     ),
     mirror_urls=(),
-    sha256="",  # Filled in by Phase B once the model is downloaded.
+    sha256="3ed9af50d5367c0b9c795b294b00e7599e4943244f4cbd376869f3bfc87721b1",
     relpath="discogs-effnet-bs64-1.pb",
+)
+
+#: 400-class genre vocabulary for the discogs-effnet head, fetched
+#: alongside the graph file at first run. The JSON sits next to the
+#: ``.pb`` in upstream's release; we hash-pin it so a relabel upstream
+#: fails closed the same way a graph rotation would.
+EFFNET_LABELS_PIN: ModelPin = ModelPin(
+    name="discogs-effnet-bs64-1-labels",
+    url=(
+        "https://essentia.upf.edu/models/feature-extractors/discogs-effnet/"
+        "discogs-effnet-bs64-1.json"
+    ),
+    mirror_urls=(),
+    # SHA256 of the upstream JSON metadata file (contains the 400-class
+    # vocabulary the indexer reads for `genre_top3`). Verified
+    # reproducible across two downloads.
+    sha256="a35003202384735c33154e20264267f9941705218a7b93202b655a1d408d4ff6",
+    relpath="discogs-effnet-bs64-1.json",
+)
+
+#: 50-class MSD vocabulary for the musicnn head — tag names map to
+#: ``mood`` and ``voice_instrumental`` fields in the sidecar.
+MUSICNN_LABELS_PIN: ModelPin = ModelPin(
+    name="msd-musicnn-1-labels",
+    url=(
+        "https://essentia.upf.edu/models/feature-extractors/musicnn/"
+        "msd-musicnn-1.json"
+    ),
+    mirror_urls=(),
+    sha256="8e6b3b509f0610c0e65dce467fd459d6777509388eaddb13ed138d8ac1341ffe",
+    relpath="msd-musicnn-1.json",
 )
 
 
@@ -114,20 +151,41 @@ EFFNET_PIN: ModelPin = ModelPin(
 class ModelSet:
     """Runtime container handed to a worker after ``ensure_models``.
 
-    Both Essentia instances are typed as ``object`` because the
+    Essentia instances are typed as ``object`` because the
     Essentia Python API is dynamic and a strict annotation would drift
-    against new wheels. Phase B will populate these from
-    ``TensorflowPredictMusiCNN`` and ``TensorflowPredictEffnetDiscogs``;
-    Phase A leaves them None so the data structures are testable.
+    against new wheels. ``ensure_models`` populates these via
+    ``TensorflowPredictMusiCNN`` and ``TensorflowPredictEffnetDiscogs``.
+
+    Three TF instances are loaded per worker (one fork in Phase B's
+    ``multiprocessing.Pool``):
+
+    - ``musicnn`` — MSD-musicnn classifier head (50 tags).
+    - ``effnet_predictions`` — discogs-effnet 400-class genre head
+      via ``output='PartitionedCall:0'``.
+    - ``effnet_embedding`` — discogs-effnet 1280-d penultimate
+      activation via ``output='PartitionedCall:1'``.
+
+    The two effnet instances must be separate because the Essentia
+    algorithm caches the ``output`` tensor name internally; trying to
+    swap it after construction is undefined behavior.
     """
 
     musicnn: object | None = None
-    effnet: object | None = None
+    effnet_predictions: object | None = None
+    effnet_embedding: object | None = None
+    musicnn_classes: tuple[str, ...] = ()
+    """50-class MSD vocabulary, in graph index order (idx i in this
+    tuple corresponds to column i in the musicnn output matrix)."""
+    effnet_classes: tuple[str, ...] = ()
+    """400-class discogs vocabulary, in graph index order."""
     effnet_embedding_output: str = "PartitionedCall:1"
     """Tensor name for the 1280-d penultimate activation. Confirmed
-    via the Essentia model card at slice-3 doc-refresh time. A future
-    upstream change to the graph internals would require an update
-    here — bump along with the model SHA256 pin."""
+    via the discogs-effnet-bs64-1.json schema at Phase B doc-refresh
+    (output_purpose='embeddings'). A future upstream change would
+    require an update here — bump along with the model SHA256 pin."""
+    effnet_predictions_output: str = "PartitionedCall:0"
+    """Tensor name for the 400-class softmax/sigmoid head. Confirmed
+    via the same JSON schema (output_purpose='predictions')."""
 
 
 # --- Verification + download primitives -------------------------------------
@@ -239,6 +297,23 @@ def fetch_pinned(
     ) from last_error
 
 
+def _load_labels(json_path: str) -> tuple[str, ...]:
+    """Read the upstream model-card JSON and return its ``classes``
+    list as an immutable tuple. The vocabulary order is contractual:
+    column ``i`` of the model output corresponds to ``classes[i]``.
+    """
+    import json as _json
+
+    with open(json_path, "rb") as f:
+        meta = _json.load(f)
+    classes = meta.get("classes")
+    if not isinstance(classes, list) or not classes:
+        raise ValueError(
+            f"model card {json_path!r} is missing a non-empty 'classes' list"
+        )
+    return tuple(str(c) for c in classes)
+
+
 def ensure_models(
     cache_dir: str | os.PathLike[str] = DEFAULT_CACHE_DIR,
     *,
@@ -246,33 +321,67 @@ def ensure_models(
 ) -> ModelSet:
     """Download (if missing) + verify both pins, then load via Essentia.
 
-    Phase A returns a ``ModelSet`` with both ``musicnn`` and ``effnet``
-    set to ``None`` — the import + load is deferred to the Phase B
-    pipeline so the scaffold installs without ``essentia-tensorflow``.
+    Called once per worker via ``Pool(initializer=...)`` so the heavy
+    ~250 MB Essentia + TF wheel only imports once per process. The
+    returned ``ModelSet`` is reused across every track in that worker.
 
-    The fetch loop is fully exercised in Phase A unit tests via the
-    ``fetcher`` injection on ``fetch_pinned``.
+    Raises :py:class:`ValueError` on hash mismatch (deletes + re-fetches
+    once via mirror URLs first; only fails after the mirror loop is
+    exhausted). Raises whatever the underlying ``urllib`` raises on
+    persistent network failure.
     """
-    # Fetch the pinned files. In Phase A, the empty pin SHA256s make
-    # this raise — that's the intended contract before Phase B fills
-    # them in. Tests pass populated pins through ``fetch_pinned``
-    # directly.
+    # Fetch the pinned graph files + their JSON model cards in one
+    # pass. Hash failure on any pin is fatal — we don't fall back to
+    # an unverified asset.
     musicnn_path = fetch_pinned(MUSICNN_PIN, cache_dir, version=version)
     effnet_path = fetch_pinned(EFFNET_PIN, cache_dir, version=version)
+    musicnn_labels_path = fetch_pinned(
+        MUSICNN_LABELS_PIN, cache_dir, version=version
+    )
+    effnet_labels_path = fetch_pinned(
+        EFFNET_LABELS_PIN, cache_dir, version=version
+    )
 
-    # Phase B will replace these stubs with:
-    #   from essentia.standard import (
-    #       TensorflowPredictMusiCNN,
-    #       TensorflowPredictEffnetDiscogs,
-    #   )
-    #   musicnn = TensorflowPredictMusiCNN(graphFilename=musicnn_path)
-    #   effnet  = TensorflowPredictEffnetDiscogs(graphFilename=effnet_path)
-    #   effnet_embedding = TensorflowPredictEffnetDiscogs(
-    #       graphFilename=effnet_path,
-    #       output=ModelSet().effnet_embedding_output,
-    #   )
-    #
-    # Returning the resolved paths in the meantime lets Phase B wire
-    # the loader without rediscovering them.
-    _ = (musicnn_path, effnet_path)
-    return ModelSet()
+    # Lazy import: the heavy `essentia` + TF symbol load is deferred
+    # to function body so the module stays importable in environments
+    # without the analysis extra installed (unit tests, doc renders).
+    import essentia  # type: ignore[import-not-found]
+    from essentia.standard import (  # type: ignore[import-not-found]
+        TensorflowPredictEffnetDiscogs,
+        TensorflowPredictMusiCNN,
+    )
+
+    # Essentia logs INFO-level "Successfully loaded graph file" plus
+    # WARNING-level "No network created…" lines on every TF predict
+    # construction; on a 20-track scan that's ~60 lines of cosmetic
+    # noise per worker. Silence them at the source — fatal errors
+    # still surface via raised exceptions.
+    try:
+        essentia.log.infoActive = False
+        essentia.log.warningActive = False
+    except AttributeError:  # pragma: no cover - defensive
+        pass
+
+    musicnn = TensorflowPredictMusiCNN(graphFilename=musicnn_path)
+
+    # Two effnet instances — one for the 400-class predictions head,
+    # one for the 1280-d embedding head. Essentia caches the `output`
+    # tensor name on construction; sharing one instance and changing
+    # `output` between calls is not supported.
+    set_template = ModelSet()
+    effnet_predictions = TensorflowPredictEffnetDiscogs(
+        graphFilename=effnet_path,
+        output=set_template.effnet_predictions_output,
+    )
+    effnet_embedding = TensorflowPredictEffnetDiscogs(
+        graphFilename=effnet_path,
+        output=set_template.effnet_embedding_output,
+    )
+
+    return ModelSet(
+        musicnn=musicnn,
+        effnet_predictions=effnet_predictions,
+        effnet_embedding=effnet_embedding,
+        musicnn_classes=_load_labels(musicnn_labels_path),
+        effnet_classes=_load_labels(effnet_labels_path),
+    )

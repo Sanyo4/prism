@@ -28,7 +28,12 @@ dependencies = [
 # a base dep.
 [project.optional-dependencies]
 analysis = [
-  "essentia-tensorflow>=2.1b6",
+  # Pin allows the dev-tagged manylinux2014_x86_64 wheel published on
+  # PyPI (e.g. `2.1b6.dev1389`). PEP 440 ordering treats dev releases
+  # as <final, so a plain `>=2.1b6` excludes the only published wheel.
+  # The pre-release-friendly spec lets pip resolve `2.1b6.dev1389` on
+  # CPython 3.11 / 3.12 manylinux.
+  "essentia-tensorflow>=2.1b6.dev0",
 ]
 test = [
   "pytest>=7.4",
