@@ -40,18 +40,26 @@ import 'queue_service.dart';
 /// stutter on user-initiated queue mutations while playing.
 ///
 /// What this service still does **not** do:
-/// - Measured ReplayGain from `.sonic.json` sidecars (slice 4).
 /// - Non-adjacent multi-element reorders as a single op. A move that
 ///   doesn't match the single-shift pattern falls to the rebuild
 ///   path — rare in slice 1's UI (only `_jumpToHere` across a large
 ///   gap triggers it), and that flow already implies a perceptual
 ///   context shift.
+///
+/// Slice 4 added: optional [measuredReplayGainLookup] hook so the
+/// service can prefer measured RG (from the sidecar cache) over tag
+/// RG. The lookup is **synchronous** — callers are expected to
+/// pre-warm a cache off the active track and feed back a value that
+/// resolves immediately. We avoid plumbing a `Future<double?>` through
+/// because volume must apply on the same frame as the source switch
+/// to avoid an audible volume bump on the first sample.
 class PlaybackService {
   PlaybackService({
     AudioPlayerPort? player,
     bool replayGainEnabled = true,
     this.onAdvance,
     this.onRetreat,
+    this.measuredReplayGainLookup,
   })  : _player = player ?? JustAudioPlayerPort(),
         _replayGainEnabled = replayGainEnabled {
     _indexSub = _player.currentIndexStream.listen(_onPlayerIndexChanged);
@@ -59,6 +67,16 @@ class PlaybackService {
 
   final AudioPlayerPort _player;
   bool _replayGainEnabled;
+
+  /// Synchronous lookup: given a [Track], return the measured (sidecar)
+  /// `replaygain_track_db` if the corresponding row is `status='ready'`
+  /// in the cache, else `null`. The service prefers this over
+  /// [Track.replayGainTrackDb] when non-null.
+  ///
+  /// Slice-4 wires this from `apps/mobile/lib/providers/cache_db_providers.dart`
+  /// — it's a pure path → double lookup against an in-memory map kept
+  /// warm by an ingest provider.
+  final double? Function(Track track)? measuredReplayGainLookup;
 
   /// Invoked when the backend's index moves forward exactly one step,
   /// signalling that the previous track finished naturally. Typical
@@ -284,17 +302,21 @@ class PlaybackService {
   }
 
   Future<void> _applyReplayGain(Track? track) async {
+    // Slice-4 precedence: measured (cache, status='ready') wins over
+    // tag-embedded. `null` from the lookup falls through to the tag.
+    final measured =
+        track == null ? null : measuredReplayGainLookup?.call(track);
     final linear = resolveVolume(
       enabled: _replayGainEnabled,
-      replayGainTrackDb: track?.replayGainTrackDb,
+      replayGainTrackDb: measured ?? track?.replayGainTrackDb,
     );
     if (_player.volume == linear) return;
     await _player.setVolume(linear);
   }
 
-  /// Pure helper: converts a tag-embedded `REPLAYGAIN_TRACK_GAIN` (in
-  /// dB) to the linear scale factor the player's `setVolume` expects,
-  /// clamped to `[0, 1]`. When [enabled] is false or the tag is
+  /// Pure helper: converts a `REPLAYGAIN_TRACK_GAIN` (dB) — measured
+  /// or tag-embedded — to the linear scale factor `setVolume` expects,
+  /// clamped to `[0, 1]`. When [enabled] is false or both inputs are
   /// absent, returns `1.0` (full-scale pass-through).
   ///
   /// Exposed as a static so tests can assert the mapping without a

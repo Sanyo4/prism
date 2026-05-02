@@ -13,7 +13,20 @@ resolution: workspace
 
 dependencies:
   audio_metadata_reader: ^1.4.2
+  # Slice 4 — sidecar ingest + SQLite cache. `sqlite3` is the Dart FFI
+  # binding (used for the vec0 read-path); `sqflite_common` provides the
+  # async write-path API that `sqflite` (Android) and `sqflite_common_ffi`
+  # (Linux desktop, dart-test) both implement. Picking `sqflite_common`
+  # at the core layer keeps `packages/core` Flutter-free; the apps wire
+  # the platform-specific factory.
+  sqflite_common: ^2.5.4
+  sqlite3: ^2.4.6
+  json_annotation: ^4.11.0
+  crypto: ^3.0.6
 
 dev_dependencies:
   test: ^1.25.0
   lints: ^6.0.0
+  build_runner: ^2.4.13
+  json_serializable: ^6.8.0
+  sqflite_common_ffi: ^2.3.4

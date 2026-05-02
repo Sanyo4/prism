@@ -1,0 +1,8 @@
+# Slice-4 test files open SQLite databases via sqflite_common_ffi
+# (single-isolate sqlite3 binding) and load `vec0` into the
+# process-wide auto-extension table. Running tests in parallel races
+# on (a) the auto-extension list mid-`sqlite3.open` and (b)
+# sqflite_common_ffi's BEGIN EXCLUSIVE transaction lock when multiple
+# DBs are opened through one isolate. Force serial execution; per-file
+# wall clock is well under 1 s so there's no real cost.
+concurrency: 1

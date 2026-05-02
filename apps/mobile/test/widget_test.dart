@@ -64,6 +64,12 @@ void main() {
       ),
       findsOneWidget,
     );
+    // The Playback section header is below the fold in the default
+    // 800x600 test viewport (slice 4 added Library + Cache stats rows
+    // ahead of it). Scroll the Settings list to bring it into view
+    // before asserting; the row exists in the tree, the assertion is
+    // about reachable layout.
+    await tester.scrollUntilVisible(find.text('Playback'), 200);
     expect(find.text('Playback'), findsOneWidget);
   });
 }

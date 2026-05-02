@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../shell/app_shell.dart';
 import '../widgets/home_random_row.dart';
+import '../widgets/mood_chip_row.dart';
 
-/// Home screen — slice 2 surface is just the "Can't decide?" row
-/// underneath a 44 px placeholder for the slice-4 mood chips.
+/// Home screen.
 ///
-/// Slice 4 fills the placeholder; slice 7 polishes the typography and
-/// adds the adaptive palette. We keep the placeholder visible (not
-/// `Visibility(false)`) so the spacing matches what slice 4 will
-/// inherit.
+/// Layout (top → bottom):
+/// - 44 px Mood chip row (slice 4): Happy / Sad / Chill / Energetic /
+///   Focus, locked order.
+/// - "Can't decide?" album row (slice 2's `HomeRandomRow`).
+/// - Slice 7 will add adaptive palette + hero polish.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -20,8 +21,9 @@ class HomeScreen extends StatelessWidget {
       currentTab: AppTab.tracks,
       child: ListView(
         children: const [
-          // Mood chips placeholder — slice 4 fills.
-          SizedBox(height: 44),
+          SizedBox(height: 8),
+          MoodChipRow(),
+          SizedBox(height: 8),
           HomeRandomRow(),
         ],
       ),

@@ -18,6 +18,11 @@ dependencies:
   audio_service: ^0.18.18
   flutter_riverpod: ^3.0.1
   prism_core: any
+  # Slice-4: PlaybackService takes an optional CacheDb at construction
+  # time so it can prefer measured RG over tag RG when status='ready'.
+  # The CacheDb type lives in prism_core; this dep is transitively
+  # already satisfied by `prism_core: any` but we don't repeat
+  # sqflite/sqlite3 here — playback only sees the Dart-typed handle.
 
 dev_dependencies:
   flutter_test:

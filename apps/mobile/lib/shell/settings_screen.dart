@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'settings_library.dart';
 import 'settings_online_metadata.dart';
 import 'settings_sections.dart';
 
-/// Settings surface. Slice 1 had two placeholder sections; slice 2
-/// composes [SettingsOnlineMetadataSection] in front of the
-/// placeholders. Other sections (Library re-scan path, Playback
-/// ReplayGain toggle) remain placeholders until later slices wire
-/// them.
+/// Settings surface. Slice-1 placeholders → slice-2 metadata section →
+/// slice-4 library re-scan + cache stats. Playback section remains
+/// placeholder until a later slice surfaces the RG toggle.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -24,15 +23,11 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         children: const [
           SettingsOnlineMetadataSection(),
-          SettingsSectionHeader(title: 'Library'),
-          SettingsSectionPlaceholder(
-            subtitle:
-                'Scan path, re-scan, and clear cache — slice 4 wires these up.',
-          ),
+          SettingsLibrarySection(),
           SettingsSectionHeader(title: 'Playback'),
           SettingsSectionPlaceholder(
             subtitle:
-                'ReplayGain toggle and gapless defaults — slice 4 wires these up.',
+                'ReplayGain toggle and gapless defaults — wired in a later slice.',
           ),
         ],
       ),

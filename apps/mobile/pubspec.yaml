@@ -35,7 +35,11 @@ dependencies:
   flutter_cache_manager: ^3.4.1
   shared_preferences: ^2.3.3
   sqflite: ^2.3.3
+  sqflite_common: ^2.5.4
   sqflite_common_ffi: ^2.3.4
+  sqlite3: ^2.4.6
+  sqlite3_flutter_libs: ^0.5.27
+  device_info_plus: ^11.2.0
   dio: ^5.7.0
   path: ^1.9.0
   # Android 13+ (API 33) made POST_NOTIFICATIONS a runtime permission.
@@ -52,3 +56,12 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Slice 4 — vec0 prebuilts shipped as Flutter assets so the runtime
+  # can copy the right ABI to <support>/native/vec0.so on first launch.
+  # The directory tree under native/ mirrors Android's ABI layout for
+  # device_info_plus.supported64BitAbis, plus a linux/x86_64 entry for
+  # desktop runs. SHA256 pins live in native/README.md.
+  assets:
+    - native/android/arm64-v8a/vec0.so
+    - native/android/x86_64/vec0.so
+    - native/linux/x86_64/vec0.so

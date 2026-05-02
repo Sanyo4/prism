@@ -444,4 +444,49 @@ void main() {
       expect(fake.disposed, isTrue);
     });
   });
+
+  group('Slice-4: measured RG (cache) precedence over tag RG', () {
+    // Slice-4 §11 item 9 / §12 DoD:
+    //   tag = -8 dB, sidecar = -6 dB → plays at dbToLinear(-6) ± 1e-3.
+    test('measured wins over tag when lookup returns a value', () async {
+      final fake = _FakePlayer();
+      final service = PlaybackService(
+        player: fake,
+        measuredReplayGainLookup: (track) => -6.0,
+      );
+      addTearDown(service.dispose);
+
+      await service.syncSnapshot(_snapshotOf([_track('a', rgDb: -8.0)]));
+
+      expect(fake.volume, closeTo(dbToLinear(-6.0), 1e-3));
+    });
+
+    test('tag wins when lookup returns null (no cache row / non-ready)',
+        () async {
+      final fake = _FakePlayer();
+      final service = PlaybackService(
+        player: fake,
+        measuredReplayGainLookup: (track) => null,
+      );
+      addTearDown(service.dispose);
+
+      await service.syncSnapshot(_snapshotOf([_track('a', rgDb: -8.0)]));
+
+      expect(fake.volume, closeTo(dbToLinear(-8.0), 1e-12));
+    });
+
+    test('lookup returning null falls all the way back to 1.0 when no tag',
+        () async {
+      final fake = _FakePlayer();
+      final service = PlaybackService(
+        player: fake,
+        measuredReplayGainLookup: (track) => null,
+      );
+      addTearDown(service.dispose);
+
+      await service.syncSnapshot(_snapshotOf([_track('a')]));
+
+      expect(fake.volume, equals(1.0));
+    });
+  });
 }

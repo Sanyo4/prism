@@ -10,15 +10,23 @@ import '../widgets/artist_tile.dart';
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
 import 'random_tab.dart';
+import 'vibe_browse_screen.dart';
 
-/// 5-tab Library surface. Replaces slice 1's flat `TracksScreen`.
+/// 6-tab Library surface. Slice 4 adds **Vibe** as a sixth tab —
+/// classifier-native chips + tempo band, backed by the sidecar cache.
 ///
-/// Tabs:
+/// Tabs (left → right):
 /// - Albums: 2-col grid of [AlbumTile]
 /// - Artists: 2-col grid of [ArtistTile]
 /// - Playlists: empty-state card ("Coming in slice 6")
 /// - Songs: slice 1's flat tracks list, extracted into `SongsTab`
 /// - Random: [RandomTab]
+/// - Vibe: [VibeBrowseScreen] (slice 4)
+///
+/// The slice-4 plan §8 step 13 originally said "section above
+/// Albums/Artists/Genres", but slice 2 already shipped tabs; we
+/// reconcile by appending a sixth tab rather than restructuring the
+/// surface.
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
 
@@ -32,7 +40,7 @@ class LibraryScreen extends ConsumerWidget {
     ref.watch(backfillKickoffProvider);
 
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: AppShell(
         title: 'Library',
         currentTab: AppTab.tracks,
@@ -46,6 +54,7 @@ class LibraryScreen extends ConsumerWidget {
                 Tab(text: 'Playlists'),
                 Tab(text: 'Songs'),
                 Tab(text: 'Random'),
+                Tab(text: 'Vibe'),
               ],
             ),
             const Expanded(
@@ -56,6 +65,7 @@ class LibraryScreen extends ConsumerWidget {
                   _PlaylistsTab(),
                   _SongsTab(),
                   RandomTab(),
+                  VibeBrowseScreen(),
                 ],
               ),
             ),

@@ -3,6 +3,8 @@ import 'package:just_audio/just_audio.dart' show PlayerState;
 import 'package:prism_core/core.dart';
 import 'package:prism_playback/playback.dart';
 
+import 'cache_db_providers.dart';
+
 /// Re-export the queue surface from `prism_playback` so every screen
 /// can `import '../providers/playback_providers.dart'` once and reach
 /// `queueProvider` + its types without a second import. The queue
@@ -28,6 +30,11 @@ final playbackServiceProvider = Provider<PlaybackService>((ref) {
   final service = PlaybackService(
     onAdvance: () => ref.read(queueProvider.notifier).advance(),
     onRetreat: () => ref.read(queueProvider.notifier).retreat(),
+    // Slice-4: prefer measured RG (sidecar cache) over tag RG when
+    // the row is `status='ready'`. The lookup reads off
+    // `measuredReplayGainProvider`'s AsyncValue — null while the cache
+    // is still loading, falling cleanly back to tag values until then.
+    measuredReplayGainLookup: measuredRgLookupOf(ref),
   );
   ref.listen<QueueSnapshot>(
     queueProvider,
