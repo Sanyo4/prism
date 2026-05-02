@@ -23,6 +23,11 @@ dependencies:
   sqlite3: ^2.4.6
   json_annotation: ^4.11.0
   crypto: ^3.0.6
+  # Slice 5 — adapter from CacheDb to the engine's PlaylistRepo port.
+  # The engine itself stays Flutter-free; this dep is what lets us
+  # implement it on top of sqflite + vec0 without leaking SQLite types
+  # into the engine.
+  prism_playlist_engine: any
 
 dev_dependencies:
   test: ^1.25.0

@@ -21,6 +21,7 @@ dependencies:
   prism_core: any
   prism_metadata: any
   prism_playback: any
+  prism_playlist_engine: any
 
   # Direct runtime deps (tight surface for slice 1)
   just_audio: ^0.10.5

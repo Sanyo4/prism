@@ -14,6 +14,7 @@ workspace:
   - packages/core
   - packages/metadata
   - packages/playback
+  - packages/playlist_engine
 
 dev_dependencies:
   melos: ^7.5.0

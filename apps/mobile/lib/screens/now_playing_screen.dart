@@ -5,6 +5,8 @@ import 'package:prism_core/core.dart';
 
 import '../providers/playback_providers.dart';
 import '../shell/app_shell.dart';
+import '../widgets/radio_badge.dart';
+import '../widgets/steer_chip_bar.dart';
 
 /// Full-screen "what's playing right now" surface — title / artist /
 /// album, a scrubber, and prev / play-pause / next transport controls.
@@ -143,6 +145,12 @@ class _PlayerView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Slice 5: RADIO badge above title; SizedBox.shrink when no
+          // radio session is running.
+          const Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: RadioBadge(),
+          ),
           // Metadata strip — single column so it wraps cleanly on the
           // Pixel 9 Pro Fold's outer screen without a specialised layout.
           Text(
@@ -170,6 +178,9 @@ class _PlayerView extends StatelessWidget {
             ),
           ],
           const Spacer(),
+          // Slice 5: SteerChipBar above the AeroSlider (slice-1's
+          // Slider stand-in). SizedBox.shrink when no radio session.
+          const SteerChipBar(),
           // Scrubber: min=0, max=duration seconds. When duration is
           // unknown we render a disabled track at its natural zero so
           // the layout doesn't jump when the backend probes it.

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_core/core.dart';
 
 import 'queue_zone.dart';
+import 'radio_mode.dart';
 
 /// Immutable three-zone queue projection consumed by `PlaybackService`
 /// and every queue-touching UI widget.
@@ -84,8 +85,27 @@ class QueueSnapshot {
 /// `NotifierProvider.new` form. Riverpod 3 moved `StateNotifier` to
 /// `legacy.dart`; we avoid that deprecation by using the modern base.
 class QueueService extends Notifier<QueueSnapshot> {
+  /// Slice-5 radio-mode flag. Off by default; slice-1 invariants in
+  /// `queue_service_test.dart` are byte-identical when the flag stays
+  /// off. The flag is exposed on [QueueService] (not the snapshot) so
+  /// flipping it does not invalidate every queue-listening widget.
+  ///
+  /// Built lazily and held for the lifetime of the [QueueService] —
+  /// Riverpod recreates the service on container dispose, which also
+  /// disposes the flag (see [_disposeFlag]).
+  late final RadioModeFlag radioMode = RadioModeFlag();
+
   @override
-  QueueSnapshot build() => const QueueSnapshot.empty();
+  QueueSnapshot build() {
+    ref.onDispose(_disposeFlag);
+    return const QueueSnapshot.empty();
+  }
+
+  void _disposeFlag() {
+    // Fire-and-forget — the controller close is sub-millisecond.
+    // ignore: discarded_futures
+    radioMode.dispose();
+  }
 
   /// Replaces the queue with [tracks], starting at [startIndex].
   /// Entries before [startIndex] are discarded (they are not fed into
@@ -118,6 +138,27 @@ class QueueService extends Notifier<QueueSnapshot> {
   /// name keeps the UX distinction clear: "Add to upcoming" never
   /// displaces a PlayNext entry.
   void addToUpcoming(Track track) {
+    state = QueueSnapshot(
+      history: state.history,
+      current: state.current,
+      playNext: state.playNext,
+      upcoming: <Track>[...state.upcoming, track],
+    );
+  }
+
+  /// Slice-5 radio entry point. Appends [track] to the tail of
+  /// [QueueZone.upcoming] **without disturbing PlayNext head** —
+  /// behaviourally identical to [addToUpcoming] today. The reason it
+  /// exists as a separate method is documentation and intent: callers
+  /// reaching for it must already be in radio mode (see
+  /// `LookaheadManager`), and any future tweak to the radio-append
+  /// semantics (e.g. inserting just below PlayNext rather than at the
+  /// tail, slice-7 polish) lands here without touching slice-1's
+  /// `addToUpcoming` contract.
+  ///
+  /// PlayNext head is preserved because we never read it; only
+  /// `upcoming` is rebuilt.
+  void appendForRadio(Track track) {
     state = QueueSnapshot(
       history: state.history,
       current: state.current,

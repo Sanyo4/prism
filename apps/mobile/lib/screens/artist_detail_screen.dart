@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_core/core.dart';
+import 'package:prism_playlist_engine/playlist_engine.dart';
 
 import '../browse/artist_view.dart';
 import '../providers/metadata_providers.dart';
 import '../providers/playback_providers.dart';
 import '../widgets/album_tile.dart';
 import 'album_detail_screen.dart';
+import 'radio_context_sheet.dart';
 
 /// Avatar + Last.fm blurb (when key present) + tags + albums + top
 /// tracks. The blurb is hidden silently when no MBID resolved or no
@@ -55,12 +57,20 @@ class _ArtistDetailBody extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Center(
-            child: CircleAvatar(
-              radius: 56,
-              child: Text(
-                _initials(artist.name),
-                style: theme.textTheme.headlineSmall,
+          // Slice 5 — long-press the avatar / header strip to start
+          // radio from the artist seed.
+          GestureDetector(
+            onLongPress: () => RadioContextSheet.show(
+              context,
+              ArtistSeed(artist: artist.name, label: artist.name),
+            ),
+            child: Center(
+              child: CircleAvatar(
+                radius: 56,
+                child: Text(
+                  _initials(artist.name),
+                  style: theme.textTheme.headlineSmall,
+                ),
               ),
             ),
           ),

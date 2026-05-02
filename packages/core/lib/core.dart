@@ -24,6 +24,7 @@ export 'src/db/cache_stats.dart';
 export 'src/db/knn.dart';
 export 'src/db/migrations.dart';
 export 'src/db/mood_query.dart';
+export 'src/db/playlist_repo_impl.dart';
 export 'src/db/track_status.dart';
 export 'src/db/vec_loader.dart';
 export 'src/db/vibe_query.dart';

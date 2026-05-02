@@ -10,3 +10,4 @@ export 'src/audio_player_port.dart';
 export 'src/playback_service.dart';
 export 'src/queue_service.dart';
 export 'src/queue_zone.dart';
+export 'src/radio_mode.dart';

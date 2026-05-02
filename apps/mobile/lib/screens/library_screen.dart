@@ -4,6 +4,7 @@ import 'package:prism_core/core.dart';
 
 import '../providers/metadata_providers.dart';
 import '../providers/playback_providers.dart';
+import '../providers/radio_providers.dart';
 import '../shell/app_shell.dart';
 import '../widgets/album_tile.dart';
 import '../widgets/artist_tile.dart';
@@ -271,6 +272,19 @@ class _SongsList extends ConsumerWidget {
                 Navigator.of(sheetContext).pop();
                 ref.read(queueProvider.notifier).addToUpcoming(track);
                 _snack(context, 'Added to queue');
+              },
+            ),
+            // Slice 5 — third tile, "Start radio from this track".
+            ListTile(
+              leading: const Icon(Icons.radio_outlined),
+              title: const Text('Start radio from this track'),
+              onTap: () async {
+                Navigator.of(sheetContext).pop();
+                // ignore: discarded_futures
+                await ref
+                    .read(radioSessionProvider.notifier)
+                    .startFromTrack(track);
+                if (context.mounted) _snack(context, 'Radio started');
               },
             ),
           ],

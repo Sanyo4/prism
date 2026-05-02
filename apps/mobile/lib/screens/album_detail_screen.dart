@@ -2,11 +2,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_core/core.dart';
+import 'package:prism_playlist_engine/playlist_engine.dart';
 
 import '../browse/album_view.dart';
 import '../providers/metadata_providers.dart';
 import '../providers/playback_providers.dart';
 import '../widgets/prism_art_cache_manager.dart';
+import 'radio_context_sheet.dart';
 
 /// Hero art + tracklist for one album. Tap a track → load context into
 /// the queue starting at that index → play.
@@ -66,7 +68,15 @@ class _AlbumDetailBody extends ConsumerWidget {
             expandedHeight: 320,
             pinned: true,
             flexibleSpace: FlexibleSpaceBar(
-              background: _Hero(album: album),
+              background: GestureDetector(
+                // Slice 5 — long-press the hero to start radio from
+                // the album seed.
+                onLongPress: () => RadioContextSheet.show(
+                  context,
+                  AlbumSeed(albumKey: album.id, title: album.title),
+                ),
+                child: _Hero(album: album),
+              ),
               title: Text(
                 album.title,
                 maxLines: 1,
@@ -75,28 +85,38 @@ class _AlbumDetailBody extends ConsumerWidget {
             ),
           ),
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(album.artist, style: theme.textTheme.titleMedium),
-                  if (album.year != null)
+            child: GestureDetector(
+              // Long-press the metadata strip too — slice 5 spec
+              // names "long-press the album cell". The hero IS the
+              // cell on the detail screen; this is the secondary
+              // affordance for users who scroll past the hero.
+              onLongPress: () => RadioContextSheet.show(
+                context,
+                AlbumSeed(albumKey: album.id, title: album.title),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(album.artist, style: theme.textTheme.titleMedium),
+                    if (album.year != null)
+                      Text(
+                        '${album.year}',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    const SizedBox(height: 4),
                     Text(
-                      '${album.year}',
-                      style: theme.textTheme.bodyMedium?.copyWith(
+                      '${album.trackCount} tracks · '
+                      '${_formatDur(album.totalDuration)}',
+                      style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${album.trackCount} tracks · '
-                    '${_formatDur(album.totalDuration)}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
