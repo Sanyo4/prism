@@ -1,0 +1,35 @@
+name: prism_metadata
+description: >-
+  Prism metadata — pure-Dart MusicBrainz / Cover Art Archive / Last.fm
+  fetchers, a single global `Pacer` that enforces MusicBrainz's 1 req/sec
+  budget, and a `sqflite`-backed cache (`metadata_cache` + `track_meta`).
+  Zero Flutter imports: this package must build and test under plain
+  `dart` without the Flutter SDK, mirroring `packages/core`'s discipline.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.11.0
+
+resolution: workspace
+
+dependencies:
+  # Prism workspace packages
+  prism_core: any
+
+  # HTTP — `dio` gives us BaseOptions (per-instance User-Agent + timeouts),
+  # InterceptorsWrapper for logging hooks, and DioException.type for the
+  # 503-driven Pacer back-off in `pacer.dart`.
+  dio: ^5.7.0
+
+  # Cache storage — pure-Dart `sqflite_common` so the package can live
+  # outside Flutter; the app side picks the platform binding (`sqflite`
+  # on Android, `sqflite_common_ffi` on Linux desktop) and hands a
+  # `DatabaseFactory` to `MetadataDb.open`.
+  sqflite_common: ^2.5.4
+  sqflite_common_ffi: ^2.3.4
+  path: ^1.9.0
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^6.0.0

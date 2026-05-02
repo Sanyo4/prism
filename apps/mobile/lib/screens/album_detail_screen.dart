@@ -1,0 +1,206 @@
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:prism_core/core.dart';
+
+import '../browse/album_view.dart';
+import '../providers/metadata_providers.dart';
+import '../providers/playback_providers.dart';
+import '../widgets/prism_art_cache_manager.dart';
+
+/// Hero art + tracklist for one album. Tap a track → load context into
+/// the queue starting at that index → play.
+///
+/// Resolution: looks up the album by [albumId] inside the latest
+/// [albumsProvider] snapshot. If the user navigates here from a stale
+/// random tab and the album has since vanished (rare — would require
+/// the user to delete files mid-session), we surface a "Not found"
+/// scaffold rather than crashing.
+class AlbumDetailScreen extends ConsumerWidget {
+  const AlbumDetailScreen({super.key, required this.albumId});
+
+  /// Stable id used as both the route param and the lookup key into
+  /// [albumsProvider]. Must match `AlbumView.id`.
+  final String albumId;
+
+  static Route<void> route(String id) =>
+      MaterialPageRoute(builder: (_) => AlbumDetailScreen(albumId: id));
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final albumsAsync = ref.watch(albumsProvider);
+    return albumsAsync.when(
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (e, _) => Scaffold(
+        appBar: AppBar(),
+        body: Center(child: Text('Library error: $e')),
+      ),
+      data: (albums) {
+        final album = albums.where((a) => a.id == albumId).firstOrNull;
+        if (album == null) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Album not found')),
+            body: const Center(child: Text('No matching album.')),
+          );
+        }
+        return _AlbumDetailBody(album: album);
+      },
+    );
+  }
+}
+
+class _AlbumDetailBody extends ConsumerWidget {
+  const _AlbumDetailBody({required this.album});
+  final AlbumView album;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final ordered = _orderedTracks(album.tracks);
+
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 320,
+            pinned: true,
+            flexibleSpace: FlexibleSpaceBar(
+              background: _Hero(album: album),
+              title: Text(
+                album.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(album.artist, style: theme.textTheme.titleMedium),
+                  if (album.year != null)
+                    Text(
+                      '${album.year}',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${album.trackCount} tracks · '
+                    '${_formatDur(album.totalDuration)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SliverList.builder(
+            itemCount: ordered.length,
+            itemBuilder: (context, i) {
+              final t = ordered[i];
+              return ListTile(
+                leading: t.trackNo == null
+                    ? null
+                    : SizedBox(
+                        width: 32,
+                        child: Text(
+                          '${t.trackNo}',
+                          textAlign: TextAlign.right,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                title: Text(
+                  t.title ?? _basename(t.path),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: Text(_formatDur(t.duration ?? Duration.zero)),
+                onTap: () => _playFrom(ref, ordered, i),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Sort by `(discNo, trackNo)`; tracks missing track numbers sort
+  /// to the end in their input order.
+  List<Track> _orderedTracks(List<Track> tracks) {
+    final list = List.of(tracks);
+    list.sort((a, b) {
+      final da = a.discNo ?? 0;
+      final db = b.discNo ?? 0;
+      if (da != db) return da.compareTo(db);
+      final ta = a.trackNo ?? (1 << 30);
+      final tb = b.trackNo ?? (1 << 30);
+      return ta.compareTo(tb);
+    });
+    return list;
+  }
+
+  void _playFrom(WidgetRef ref, List<Track> tracks, int index) {
+    ref.read(queueProvider.notifier).loadContext(tracks, startIndex: index);
+    // ignore: discarded_futures
+    ref.read(playbackServiceProvider).play();
+  }
+
+  static String _basename(String path) {
+    final i = path.lastIndexOf('/');
+    return i < 0 ? path : path.substring(i + 1);
+  }
+
+  static String _formatDur(Duration d) {
+    final s = d.inSeconds;
+    final h = s ~/ 3600;
+    final m = (s % 3600) ~/ 60;
+    final ss = (s % 60).toString().padLeft(2, '0');
+    if (h > 0) {
+      return '$h:${m.toString().padLeft(2, '0')}:$ss';
+    }
+    return '$m:$ss';
+  }
+}
+
+class _Hero extends StatelessWidget {
+  const _Hero({required this.album});
+  final AlbumView album;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = album.coverUrl;
+    if (url == null) {
+      return ColoredBox(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: const Center(
+          child: Icon(Icons.album_outlined, size: 96, color: Colors.white70),
+        ),
+      );
+    }
+    return CachedNetworkImage(
+      imageUrl: url,
+      cacheKey: album.releaseMbid,
+      cacheManager: PrismArtCacheManager(),
+      fit: BoxFit.cover,
+      placeholder: (context, url) =>
+          const ColoredBox(color: Colors.black12),
+      errorWidget: (context, url, error) =>
+          const ColoredBox(color: Colors.black12),
+    );
+  }
+}
+
+extension _Firstish<E> on Iterable<E> {
+  E? get firstOrNull {
+    final it = iterator;
+    return it.moveNext() ? it.current : null;
+  }
+}

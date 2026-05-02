@@ -1,19 +1,33 @@
 import 'package:flutter/material.dart';
 
+import 'screens/home_screen.dart';
+import 'screens/library_screen.dart';
 import 'screens/now_playing_screen.dart';
 import 'screens/queue_screen.dart';
-import 'screens/tracks_screen.dart';
-import 'shell/app_shell.dart';
 
-/// Root widget — [MaterialApp] + the named routes for the three
-/// top-level tabs.
+/// Root widget — [MaterialApp] + the named routes for the top-level
+/// surfaces.
 ///
-/// The gear-triggered [SettingsScreen] is pushed on top of whichever
-/// tab is current (see [AppShell]); it is intentionally *not* a named
-/// route, because we want a plain pop to return to the tab the user
-/// came from instead of resetting to Tracks.
+/// Slice 2 changes:
+/// - replaces `tracksRoute` body (was `TracksScreen`) with the
+///   5-tab [LibraryScreen]; the route name is preserved so the
+///   bottom-nav handler in `AppShell` keeps working.
+/// - introduces `homeRoute` for [HomeScreen] (the "Can't decide?"
+///   surface); slice 7 will move it ahead of Library in the bottom
+///   nav. For slice 2 it's reachable only via deep link / future
+///   navigation entries.
+///
+/// The backfill queue kicks off from inside [LibraryScreen] (its
+/// providers chain pulls `backfillKickoffProvider` to start the
+/// queue when the user actually sees the library). Doing it from the
+/// root would force the metadata repository — and therefore
+/// `path_provider` — into every widget test that pumps `PrismApp`.
 class PrismApp extends StatelessWidget {
   const PrismApp({super.key});
+
+  // Route names (kept here so consumers don't drift).
+  static const homeRoute = '/home';
+  static const libraryRoute = '/'; // matches AppShell.tracksRoute by intent
 
   @override
   Widget build(BuildContext context) {
@@ -23,11 +37,12 @@ class PrismApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
       ),
-      initialRoute: AppShell.tracksRoute,
+      initialRoute: libraryRoute,
       routes: {
-        AppShell.tracksRoute: (_) => const TracksScreen(),
-        AppShell.nowPlayingRoute: (_) => const NowPlayingScreen(),
-        AppShell.queueRoute: (_) => const QueueScreen(),
+        libraryRoute: (_) => const LibraryScreen(),
+        homeRoute: (_) => const HomeScreen(),
+        '/now-playing': (_) => const NowPlayingScreen(),
+        '/queue': (_) => const QueueScreen(),
       },
     );
   }

@@ -12,6 +12,7 @@ environment:
 workspace:
   - apps/mobile
   - packages/core
+  - packages/metadata
   - packages/playback
 
 dev_dependencies:

@@ -5,35 +5,39 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/app.dart';
 
 void main() {
-  // Covers the slice 1 §12 DoD item: "The gear icon opens SettingsScreen
-  // from every top-level screen; the screen renders Library and Playback
-  // section headers." We can't assert the `audio_service` integration
-  // here — its `AudioService.init` needs a platform channel — but the
-  // rest of the UI is testable under `ProviderScope` alone.
+  // Slice 1 §12 DoD: "The gear icon opens SettingsScreen from every
+  // top-level screen." Slice 2 renames the initial tab to Library and
+  // adds the Online Metadata section in front of the slice-1
+  // placeholders; the gear-icon journey itself is unchanged.
+  //
+  // We can't assert the `audio_service` integration here — its
+  // `AudioService.init` needs a platform channel — but the rest of
+  // the UI is testable under `ProviderScope` alone, provided the
+  // backfill kickoff lives off the root widget (so this test does not
+  // need a `path_provider` mock).
   testWidgets('Gear icon reaches Settings from every top-level tab',
       (tester) async {
     await tester.pumpWidget(
       const ProviderScope(child: PrismApp()),
     );
+    // Don't pumpAndSettle: the LibraryScreen's tabs spin up async
+    // providers that we'd otherwise have to mock. The first frame
+    // already has the AppBar + gear, which is what this test verifies.
 
-    // Tracks is the initial tab. Assert we're on it and the gear renders.
-    expect(find.widgetWithText(AppBar, 'Tracks'), findsOneWidget);
+    expect(find.widgetWithText(AppBar, 'Library'), findsOneWidget);
     expect(
       find.byIcon(Icons.settings),
       findsOneWidget,
-      reason: 'Tracks tab must surface the gear icon.',
+      reason: 'Library tab must surface the gear icon.',
     );
 
-    // Bottom nav should offer all three tabs. Check the inactive icons
-    // are present — the active one for Tracks (Icons.library_music) is
-    // covered implicitly by the `findsOneWidget` above via the app bar
-    // assertion, and distinct from the inactive Queue / Now Playing
-    // icons we verify here.
+    // Bottom nav offers all three slice-1 tabs (Tracks/NowPlaying/Queue).
+    // Inactive icons we verify here; the active one is the same as the
+    // current tab and covered by the AppBar assertion above.
     expect(find.byIcon(Icons.play_circle_outline), findsOneWidget);
     expect(find.byIcon(Icons.queue_music_outlined), findsOneWidget);
 
-    // Hop to Queue via its inactive icon; confirm gear persists and
-    // the Queue app bar takes over.
+    // Hop to Queue via its inactive icon; confirm gear persists.
     await tester.tap(find.byIcon(Icons.queue_music_outlined));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'Queue'), findsOneWidget);
@@ -43,12 +47,23 @@ void main() {
       reason: 'Queue tab must also surface the gear icon.',
     );
 
-    // Tap the gear → Settings screen, with both placeholder section
-    // headers visible.
+    // Tap the gear → Settings screen, with all three section headers
+    // visible (Online Metadata + Library + Playback). We use a
+    // text-typed finder restricted to ListView descendants to avoid
+    // matching the Library bottom-nav label.
     await tester.tap(find.byIcon(Icons.settings));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'Settings'), findsOneWidget);
-    expect(find.text('Library'), findsOneWidget);
+    expect(find.text('Online Metadata'), findsOneWidget);
+    // The Library *section header* in Settings — there's also a
+    // Library tab elsewhere; restricting via ancestor disambiguates.
+    expect(
+      find.descendant(
+        of: find.byType(ListView),
+        matching: find.text('Library'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Playback'), findsOneWidget);
   });
 }

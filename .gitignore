@@ -30,6 +30,9 @@ pubspec.lock
 scratch/
 api-summary-*.md
 
+# Worktrees
+.worktrees/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'settings_online_metadata.dart';
 import 'settings_sections.dart';
 
-/// Placeholder Settings surface.
-///
-/// Slice 1's only contract here is: the gear icon in [AppShell] reaches
-/// this screen from every top-level tab, and the screen renders two
-/// slice-tagged placeholder sections (`Library`, `Playback`). Later
-/// slices (2, 4, 7) append real rows under those headers without
-/// restructuring — which is why the header + subtitle widgets live in
-/// a separate `settings_sections.dart` file.
+/// Settings surface. Slice 1 had two placeholder sections; slice 2
+/// composes [SettingsOnlineMetadataSection] in front of the
+/// placeholders. Other sections (Library re-scan path, Playback
+/// ReplayGain toggle) remain placeholders until later slices wire
+/// them.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -25,15 +23,16 @@ class SettingsScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: const [
+          SettingsOnlineMetadataSection(),
           SettingsSectionHeader(title: 'Library'),
           SettingsSectionPlaceholder(
             subtitle:
-                'Scan path, re-scan, and clear cache — slice 2 wires these up.',
+                'Scan path, re-scan, and clear cache — slice 4 wires these up.',
           ),
           SettingsSectionHeader(title: 'Playback'),
           SettingsSectionPlaceholder(
             subtitle:
-                'ReplayGain toggle and gapless defaults — slice 2 wires these up.',
+                'ReplayGain toggle and gapless defaults — slice 4 wires these up.',
           ),
         ],
       ),
