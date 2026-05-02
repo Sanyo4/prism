@@ -33,6 +33,16 @@ api-summary-*.md
 # Worktrees
 .worktrees/
 
+# Python (apps/indexer)
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
 # OS
 .DS_Store
 Thumbs.db
