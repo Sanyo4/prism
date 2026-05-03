@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../providers/radio_providers.dart';
 import '../radio/recent_seeds_store.dart';
@@ -23,28 +24,30 @@ class RadioHomeCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final seeds = ref.watch(recentSeedsProvider);
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
 
     if (seeds.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.radio_outlined,
-                  color: theme.colorScheme.primary,
+        padding: EdgeInsets.fromLTRB(tokens.s4, tokens.s3, tokens.s4, tokens.s1),
+        child: Glass(
+          intensity: GlassIntensity.medium,
+          radius: tokens.s4,
+          padding: EdgeInsets.all(tokens.s4),
+          child: Row(
+            children: [
+              Icon(
+                Icons.radio_outlined,
+                color: theme.colorScheme.primary,
+              ),
+              SizedBox(width: tokens.s3),
+              Expanded(
+                child: Text(
+                  'Long-press a track, album, or artist to start radio.',
+                  style: scale.body16,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Long-press a track, album, or artist to start radio.',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       );
@@ -58,53 +61,52 @@ class RadioHomeCard extends ConsumerWidget {
         itemBuilder: (context, i) {
           final entry = seeds[i];
           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Card(
-              clipBehavior: Clip.antiAlias,
+            padding: EdgeInsets.symmetric(horizontal: tokens.s2, vertical: tokens.s2),
+            child: Glass(
+              intensity: GlassIntensity.medium,
+              radius: tokens.s4,
+              padding: EdgeInsets.all(tokens.s3),
               child: InkWell(
                 onTap: () => _launch(ref, entry),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.radio_outlined,
-                        color: theme.colorScheme.primary,
-                        size: 32,
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.radio_outlined,
+                      color: theme.colorScheme.primary,
+                      size: 32,
+                    ),
+                    SizedBox(width: tokens.s3),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Radio',
+                            style: scale.caption13.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                          SizedBox(height: tokens.s1 / 2),
+                          Text(
+                            entry.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: scale.display20,
+                          ),
+                          SizedBox(height: tokens.s1 / 2),
+                          Text(
+                            _kindLabel(entry.kind),
+                            style: scale.caption13.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Radio',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: theme.colorScheme.primary,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.6,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              entry.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _kindLabel(entry.kind),
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),

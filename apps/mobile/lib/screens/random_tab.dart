@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../browse/album_view.dart';
 import '../browse/artist_view.dart';
@@ -31,10 +32,11 @@ class _RandomTabState extends ConsumerState<RandomTab> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<SpaceTokens>()!;
     final albumsAsync = ref.watch(albumsProvider);
     final artistsAsync = ref.watch(artistsProvider);
     return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: EdgeInsets.symmetric(vertical: tokens.s4),
       children: [
         _SectionHeader(
           title: 'Pick an Album',
@@ -43,7 +45,7 @@ class _RandomTabState extends ConsumerState<RandomTab> {
           }),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: EdgeInsets.symmetric(horizontal: tokens.s4),
           child: albumsAsync.when(
             loading: () => const _LoadingTile(),
             error: (e, _) => _ErrorTile(message: 'Library unavailable'),
@@ -52,7 +54,7 @@ class _RandomTabState extends ConsumerState<RandomTab> {
                 : _AlbumGrid(albums: _pickAlbums(albums)),
           ),
         ),
-        const SizedBox(height: 24),
+        SizedBox(height: tokens.s6),
         _SectionHeader(
           title: 'Pick an Artist',
           onRefresh: () => setState(() {
@@ -91,13 +93,16 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+      padding: EdgeInsets.fromLTRB(tokens.s4, tokens.s2, tokens.s2, tokens.s2),
       child: Row(
         children: [
           Text(
             title,
-            style: Theme.of(context).textTheme.titleMedium,
+            style: scale.display20,
           ),
           const Spacer(),
           RefreshIconButton(onPressed: onRefresh),
@@ -117,12 +122,13 @@ class _AlbumGrid extends StatelessWidget {
     // it forces a fixed extent; six manually-laid tiles let the tile
     // widget pick its own intrinsic size and avoid layout assertions
     // when the artist surface re-renders.
+    final tokens = Theme.of(context).extension<SpaceTokens>()!;
     return GridView.count(
       crossAxisCount: 3,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
+      mainAxisSpacing: tokens.s3,
+      crossAxisSpacing: tokens.s3,
       childAspectRatio: 0.75,
       children: [
         for (final a in albums)
@@ -143,11 +149,12 @@ class _ArtistRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<SpaceTokens>()!;
     return ListView.separated(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.symmetric(horizontal: tokens.s4),
       itemCount: artists.length,
-      separatorBuilder: (context, index) => const SizedBox(width: 12),
+      separatorBuilder: (context, index) => SizedBox(width: tokens.s3),
       itemBuilder: (context, i) {
         final a = artists[i];
         return ArtistTile(

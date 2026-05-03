@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../providers/radio_providers.dart';
 import '../shell/app_shell.dart';
@@ -23,15 +24,17 @@ class RadioSeedHeader extends ConsumerWidget {
     final session = ref.watch(radioSessionProvider);
     if (session == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return InkWell(
       // Tap → Home (Tracks tab is the route Home / Library lives behind
       // in the slice 5 wiring; the RadioHomeCard is rendered there).
       onTap: () =>
           Navigator.of(context).pushReplacementNamed(AppShell.tracksRoute),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        padding: EdgeInsets.fromLTRB(tokens.s4, tokens.s3, tokens.s4, tokens.s1),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: EdgeInsets.symmetric(horizontal: tokens.s3, vertical: tokens.s1 + 2),
           decoration: BoxDecoration(
             color: theme.colorScheme.primaryContainer,
             borderRadius: BorderRadius.circular(999),
@@ -44,13 +47,13 @@ class RadioSeedHeader extends ConsumerWidget {
                 size: 16,
                 color: theme.colorScheme.onPrimaryContainer,
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: tokens.s1 + 2),
               Flexible(
                 child: Text(
                   "Radio · seeded from '${session.seed.label}'",
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelMedium?.copyWith(
+                  style: scale.caption13.copyWith(
                     color: theme.colorScheme.onPrimaryContainer,
                     fontWeight: FontWeight.w600,
                   ),

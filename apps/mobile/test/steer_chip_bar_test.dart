@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/providers/radio_providers.dart';
+import 'package:mobile/theme/prism_theme.dart';
 import 'package:mobile/widgets/steer_chip_bar.dart';
 import 'package:prism_playlist_engine/playlist_engine.dart';
 
@@ -64,8 +65,9 @@ void main() {
           overrides: [
             radioSessionProvider.overrideWith(_FakeSessionNotifier.new),
           ],
-          child: const MaterialApp(
-            home: Scaffold(body: SteerChipBar()),
+          child: MaterialApp(
+            theme: PrismTheme.light(),
+            home: const Scaffold(body: SteerChipBar()),
           ),
         ),
       );
@@ -86,8 +88,9 @@ void main() {
             radioSessionProvider
                 .overrideWith(() => _FakeSessionNotifier(initial: null)),
           ],
-          child: const MaterialApp(
-            home: Scaffold(body: SteerChipBar()),
+          child: MaterialApp(
+            theme: PrismTheme.light(),
+            home: const Scaffold(body: SteerChipBar()),
           ),
         ),
       );
@@ -111,8 +114,9 @@ void main() {
             radioSessionProvider
                 .overrideWith(() => _FakeSessionNotifier(initial: initial)),
           ],
-          child: const MaterialApp(
-            home: Scaffold(body: SteerChipBar()),
+          child: MaterialApp(
+            theme: PrismTheme.light(),
+            home: const Scaffold(body: SteerChipBar()),
           ),
         ),
       );

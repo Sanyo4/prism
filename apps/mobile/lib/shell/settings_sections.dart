@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:prism_ui/ui.dart';
 
 /// Dense, primary-tinted label that groups related preference rows.
 /// Sits on the scaffold background (not an elevated container) so the
@@ -11,11 +12,13 @@ class SettingsSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+      padding: EdgeInsets.fromLTRB(tokens.s4, tokens.s6, tokens.s4, tokens.s2),
       child: Text(
         title,
-        style: theme.textTheme.titleSmall?.copyWith(
+        style: scale.caption13.copyWith(
           color: theme.colorScheme.primary,
           fontWeight: FontWeight.w600,
         ),
@@ -36,12 +39,12 @@ class SettingsSectionPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scale = theme.extension<TypographyScale>()!;
     return ListTile(
       dense: true,
       title: Text(
         subtitle,
-        style: theme.textTheme.bodyMedium
-            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        style: scale.body16.copyWith(color: theme.colorScheme.onSurfaceVariant),
       ),
     );
   }

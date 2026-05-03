@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:prism_core/core.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../screens/mood_results_screen.dart';
 
@@ -24,13 +25,14 @@ class MoodChipRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<SpaceTokens>()!;
     return SizedBox(
       height: 44,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: EdgeInsets.symmetric(horizontal: tokens.s4),
         itemCount: visualOrder.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => SizedBox(width: tokens.s2),
         itemBuilder: (context, i) {
           final chip = visualOrder[i];
           return FilterChip(

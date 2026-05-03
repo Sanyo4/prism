@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:prism_ui/ui.dart';
 
 import 'settings_screen.dart';
 
@@ -35,6 +36,8 @@ class AppShell extends StatelessWidget {
     required this.currentTab,
     required this.child,
     this.actions = const <Widget>[],
+    this.useAurora,
+    this.auroraAccentOverride,
   });
 
   final String title;
@@ -47,6 +50,15 @@ class AppShell extends StatelessWidget {
   /// always stays rightmost — Material convention for
   /// "more / settings".
   final List<Widget> actions;
+
+  /// Slice 7 §13 — when set, wraps the Scaffold body in
+  /// [AuroraBackground] with the matching variant. Null = no
+  /// backdrop (slice 1 baseline).
+  final AuroraVariant? useAurora;
+
+  /// Optional accent override piped into [AuroraBackground]. Only
+  /// honored by `album` and `player` variants; ignored otherwise.
+  final Color? auroraAccentOverride;
 
   /// Named routes for the three top-level tabs. Declared here so the
   /// shell is the single place mapping [AppTab] → route name and the
@@ -73,7 +85,20 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Slice 7 §13: AuroraBackground wraps only the body so the
+    // AppBar's tinting stays Material-default. When useAurora is null
+    // (slice 1 baseline), the body renders raw — no double-paint cost.
+    final aurora = useAurora;
+    final body = aurora == null
+        ? child
+        : AuroraBackground(
+            variant: aurora,
+            accentOverride: auroraAccentOverride,
+            child: child,
+          );
     return Scaffold(
+      // Aurora paints the backdrop; Scaffold default would obscure it.
+      backgroundColor: aurora == null ? null : Colors.transparent,
       appBar: AppBar(
         title: Text(title),
         actions: [
@@ -86,7 +111,7 @@ class AppShell extends StatelessWidget {
           ),
         ],
       ),
-      body: child,
+      body: body,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentTab.index,
         onTap: (i) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_core/core.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../providers/ingest_providers.dart';
 import '../providers/playback_providers.dart';
@@ -117,9 +118,11 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(tokens.s6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -131,16 +134,16 @@ class _EmptyState extends StatelessWidget {
               size: 48,
               color: theme.colorScheme.onSurfaceVariant,
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: tokens.s4),
             Text(
               'Nothing matches "${MoodResultsScreen._titleFor(chip)}" yet.',
-              style: theme.textTheme.titleMedium,
+              style: scale.display20,
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: tokens.s2),
             Text(
               'Run the desktop indexer on your library and Re-scan from Settings to populate the cache.',
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: scale.body16.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
               textAlign: TextAlign.center,

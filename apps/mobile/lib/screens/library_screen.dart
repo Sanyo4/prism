@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_core/core.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../providers/metadata_providers.dart';
 import '../providers/playback_providers.dart';
@@ -45,6 +46,10 @@ class LibraryScreen extends ConsumerWidget {
       child: AppShell(
         title: 'Library',
         currentTab: AppTab.tracks,
+        // Slice 7 §13 — wraps Library in the `library` Aurora variant
+        // (least-accented). The Scaffold's AppBar stays Material-default;
+        // only the body gains the backdrop.
+        useAurora: AuroraVariant.library,
         child: Column(
           children: [
             const TabBar(
@@ -82,17 +87,18 @@ class _AlbumsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final albumsAsync = ref.watch(albumsProvider);
+    final tokens = Theme.of(context).extension<SpaceTokens>()!;
     return albumsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Library error: $e')),
       data: (albums) => albums.isEmpty
           ? const _EmptyTab(text: 'No albums yet.')
           : GridView.builder(
-              padding: const EdgeInsets.all(16),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              padding: EdgeInsets.all(tokens.s4),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
+                mainAxisSpacing: tokens.s4,
+                crossAxisSpacing: tokens.s4,
                 childAspectRatio: 0.8,
               ),
               itemCount: albums.length,
@@ -115,17 +121,18 @@ class _ArtistsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final artistsAsync = ref.watch(artistsProvider);
+    final tokens = Theme.of(context).extension<SpaceTokens>()!;
     return artistsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Library error: $e')),
       data: (artists) => artists.isEmpty
           ? const _EmptyTab(text: 'No artists yet.')
           : GridView.builder(
-              padding: const EdgeInsets.all(16),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              padding: EdgeInsets.all(tokens.s4),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
+                mainAxisSpacing: tokens.s4,
+                crossAxisSpacing: tokens.s4,
                 childAspectRatio: 0.78,
               ),
               itemCount: artists.length,
@@ -148,11 +155,13 @@ class _PlaylistsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = Theme.of(context).extension<SpaceTokens>()!;
+    final scale = Theme.of(context).extension<TypographyScale>()!;
     return Center(
       child: Card(
-        margin: const EdgeInsets.all(24),
+        margin: EdgeInsets.all(tokens.s6),
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(tokens.s6),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -161,13 +170,13 @@ class _PlaylistsTab extends StatelessWidget {
                 size: 48,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
-              const SizedBox(height: 16),
-              Text('Coming in slice 6', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
+              SizedBox(height: tokens.s4),
+              Text('Coming in slice 6', style: scale.display20),
+              SizedBox(height: tokens.s2),
               Text(
                 'Vibe-driven and saved playlists ship alongside the on-device LLM.',
                 textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
+                style: scale.body16.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),

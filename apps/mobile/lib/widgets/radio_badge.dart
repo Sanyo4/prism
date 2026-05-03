@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../providers/radio_providers.dart';
 
@@ -21,17 +22,19 @@ class RadioBadge extends ConsumerWidget {
     final isOn = ref.watch(radioModeProvider);
     if (!isOn) return const SizedBox.shrink();
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: EdgeInsets.only(bottom: tokens.s1),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        padding: EdgeInsets.symmetric(horizontal: tokens.s2, vertical: tokens.s1 / 2),
         decoration: BoxDecoration(
           color: theme.colorScheme.primaryContainer,
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
           'RADIO',
-          style: TextStyle(
+          style: scale.caption13.copyWith(
             fontSize: 11,
             letterSpacing: 1.2,
             fontWeight: FontWeight.w700,

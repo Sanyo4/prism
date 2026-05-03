@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/settings_theme_section.dart';
 import 'settings_library.dart';
 import 'settings_llm_section.dart';
 import 'settings_online_metadata.dart';
@@ -30,6 +31,11 @@ class SettingsScreen extends StatelessWidget {
           // asserts visible section headers via `scrollUntilVisible`)
           // still resolves "Playback" past this section.
           SettingsLlmSection(),
+          // Slice 7 — Theme preset picker. Sits above Playback so the
+          // existing widget test (which scrolls "Playback" into view)
+          // still resolves; we deliberately don't reorder slice 1's
+          // anchor section.
+          SettingsThemeSection(),
           SettingsSectionHeader(title: 'Playback'),
           SettingsSectionPlaceholder(
             subtitle:

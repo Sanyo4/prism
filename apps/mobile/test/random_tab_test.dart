@@ -5,6 +5,7 @@ import 'package:mobile/browse/album_view.dart';
 import 'package:mobile/browse/artist_view.dart';
 import 'package:mobile/providers/metadata_providers.dart';
 import 'package:mobile/screens/random_tab.dart';
+import 'package:mobile/theme/prism_theme.dart';
 
 void main() {
   testWidgets('RandomTab renders 6 albums and 6 artists', (tester) async {
@@ -19,7 +20,10 @@ void main() {
           albumsProvider.overrideWith((ref) => AsyncValue.data(albums)),
           artistsProvider.overrideWith((ref) => AsyncValue.data(artists)),
         ],
-        child: const MaterialApp(home: Scaffold(body: RandomTab())),
+        child: MaterialApp(
+          theme: PrismTheme.light(),
+          home: const Scaffold(body: RandomTab()),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -51,7 +55,10 @@ void main() {
           albumsProvider.overrideWith((ref) => AsyncValue.data(albums)),
           artistsProvider.overrideWith((ref) => AsyncValue.data(artists)),
         ],
-        child: const MaterialApp(home: Scaffold(body: RandomTab())),
+        child: MaterialApp(
+          theme: PrismTheme.light(),
+          home: const Scaffold(body: RandomTab()),
+        ),
       ),
     );
     await tester.pumpAndSettle();

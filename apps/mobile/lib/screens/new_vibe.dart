@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // TODO(slice-6-integration): tighten to the playlist_engine barrel
 // once Track A appends the slice-6 exports.
 import 'package:prism_playlist_engine/llm_backend.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../providers/llm_providers.dart';
 import '../providers/playlist_engine_providers.dart';
@@ -82,10 +83,14 @@ class _NewVibeSheetState extends ConsumerState<NewVibeSheet> {
         if (didPop) await _onWillPop();
       },
       child: Scaffold(
+        backgroundColor: Colors.transparent,
         appBar: AppBar(
           title: const Text('New Vibe'),
+          // Aurora paints the backdrop; AppBar stays default-Material.
         ),
-        body: vibe == null
+        body: AuroraBackground(
+          variant: AuroraVariant.ai,
+          child: vibe == null
             ? _ComposeView(
                 controller: _controller,
                 onSubmit: _submit,
@@ -105,6 +110,7 @@ class _NewVibeSheetState extends ConsumerState<NewVibeSheet> {
                 },
                 themeOverride: theme,
               ),
+        ),
       ),
     );
   }
@@ -121,8 +127,9 @@ class _ComposeView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<SpaceTokens>()!;
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(tokens.s4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -142,7 +149,7 @@ class _ComposeView extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: tokens.s4),
           ValueListenableBuilder<TextEditingValue>(
             valueListenable: controller,
             builder: (context, value, _) {
@@ -238,27 +245,29 @@ class _ErrorView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(tokens.s6),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.error_outline,
               size: 48, color: theme.colorScheme.error),
-          const SizedBox(height: 16),
+          SizedBox(height: tokens.s4),
           Text(
             'Pipeline failed',
-            style: theme.textTheme.titleMedium,
+            style: scale.display20,
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.s2),
           Text(
             '$error',
             textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
+            style: scale.body16.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: tokens.s4),
           OutlinedButton.icon(
             onPressed: onRetry,
             icon: const Icon(Icons.refresh),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // TODO(slice-6-integration): tighten to the slice-6 barrel once
 // Track B exports `OllamaHealth` + `OllamaHealthStatus`.
 import 'package:prism_llm_desktop/llm_desktop.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../providers/llm_providers.dart';
 import 'settings_sections.dart';
@@ -43,6 +44,8 @@ class _SettingsLlmSectionState extends ConsumerState<SettingsLlmSection> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     final cfg = ref.watch(ollamaConfigProvider);
     if (!_hydrated) {
       _controller.text = cfg.baseUrl.toString();
@@ -56,7 +59,7 @@ class _SettingsLlmSectionState extends ConsumerState<SettingsLlmSection> {
       children: [
         const SettingsSectionHeader(title: 'LLM'),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: EdgeInsets.symmetric(horizontal: tokens.s4),
           child: Row(
             children: [
               Expanded(
@@ -69,7 +72,7 @@ class _SettingsLlmSectionState extends ConsumerState<SettingsLlmSection> {
                   style: const TextStyle(fontFamily: 'monospace'),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: tokens.s3),
               FilledButton.tonal(
                 onPressed: _testing ? null : _onSave,
                 child: const Text('Save'),
@@ -77,20 +80,20 @@ class _SettingsLlmSectionState extends ConsumerState<SettingsLlmSection> {
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.s2),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: EdgeInsets.symmetric(horizontal: tokens.s4),
           child: Row(
             children: [
               _StatusDot(
                 status: health?.status,
                 key: const ValueKey('ollama-status-dot'),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: tokens.s2),
               Expanded(
                 child: Text(
                   _testResult ?? _statusLabel(health),
-                  style: theme.textTheme.bodyMedium,
+                  style: scale.body16,
                 ),
               ),
               TextButton(
@@ -104,7 +107,7 @@ class _SettingsLlmSectionState extends ConsumerState<SettingsLlmSection> {
           _MissingModelHint(model: cfg.model),
         if (health?.status == OllamaHealthStatus.down)
           const _OllamaDownHint(),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.s2),
       ],
     );
   }
@@ -198,15 +201,17 @@ class _MissingModelHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     final cmd = 'ollama pull $model';
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: tokens.s4, vertical: tokens.s1 + 2),
       child: Row(
         children: [
           Expanded(
             child: SelectableText(
               cmd,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: scale.body16.copyWith(
                 fontFamily: 'monospace',
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -240,11 +245,13 @@ class _OllamaDownHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: tokens.s4, vertical: tokens.s1 + 2),
       child: SelectableText(
         'systemctl --user start ollama',
-        style: theme.textTheme.bodyMedium?.copyWith(
+        style: scale.body16.copyWith(
           fontFamily: 'monospace',
           color: theme.colorScheme.onSurfaceVariant,
         ),

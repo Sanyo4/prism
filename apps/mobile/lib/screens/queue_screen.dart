@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_core/core.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../providers/playback_providers.dart';
 import '../shell/app_shell.dart';
@@ -55,6 +56,8 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
     return AppShell(
       title: 'Queue',
       currentTab: AppTab.queue,
+      // Slice 7 §13 — Queue is a least-accented surface, like Library.
+      useAurora: AuroraVariant.library,
       actions: [
         IconButton(
           tooltip: 'Clear Up Next',
@@ -175,7 +178,11 @@ class _QueueSections extends ConsumerWidget {
             ),
           ),
 
-        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: Theme.of(context).extension<SpaceTokens>()!.s6,
+          ),
+        ),
       ],
     );
   }
@@ -188,11 +195,13 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+      padding: EdgeInsets.fromLTRB(tokens.s4, tokens.s4 + 4, tokens.s4, tokens.s2),
       child: Text(
         title,
-        style: theme.textTheme.titleSmall?.copyWith(
+        style: scale.caption13.copyWith(
           color: theme.colorScheme.primary,
           fontWeight: FontWeight.w600,
         ),
@@ -229,11 +238,13 @@ class _UpcomingHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     final hasContent = count > 0;
     return InkWell(
       onTap: hasContent ? onToggle : null,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+        padding: EdgeInsets.fromLTRB(tokens.s4, tokens.s4 + 4, tokens.s4, tokens.s2),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -243,18 +254,18 @@ class _UpcomingHeader extends StatelessWidget {
                 children: [
                   Text(
                     'Upcoming',
-                    style: theme.textTheme.titleSmall?.copyWith(
+                    style: scale.caption13.copyWith(
                       color: theme.colorScheme.primary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   if (hasContent)
                     Padding(
-                      padding: const EdgeInsets.only(top: 2),
+                      padding: EdgeInsets.only(top: tokens.s1 / 2),
                       child: Text(
                         'Playing from Tracks · '
                         '$count ${count == 1 ? "track" : "tracks"}',
-                        style: theme.textTheme.bodySmall?.copyWith(
+                        style: scale.caption13.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
@@ -283,12 +294,15 @@ class _SectionPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: tokens.s4, vertical: tokens.s2),
       child: Text(
         text,
-        style: theme.textTheme.bodyMedium
-            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        style: scale.body16.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }
@@ -461,10 +475,11 @@ class _EmptyQueueView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    final tokens = Theme.of(context).extension<SpaceTokens>()!;
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Text(
+        padding: EdgeInsets.all(tokens.s6),
+        child: const Text(
           'The queue is empty.\n\n'
           'Tap a track on the Tracks tab to start a playback context, '
           'or long-press a track for "Play Next" / "Add to Queue".',

@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../browse/album_view.dart';
 import 'prism_art_cache_manager.dart';
@@ -29,38 +30,59 @@ class AlbumTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: SizedBox(
         width: size,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: AspectRatio(
-                aspectRatio: 1,
-                child: _Cover(
-                  coverUrl: album.coverUrl,
-                  cacheKey: album.releaseMbid,
-                  fallbackSeed: album.id,
+            // Slice 7 §8 step 11 — tile is the source of the
+            // (art / title / artist) triple-hero. Radius starts at 14;
+            // the FlightShuttleBuilder on the detail interpolates to
+            // 24 mid-flight and to 8 on the player route.
+            Hero(
+              tag: HeroTags.art(album.id),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: _Cover(
+                    coverUrl: album.coverUrl,
+                    cacheKey: album.releaseMbid,
+                    fallbackSeed: album.id,
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              album.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleSmall,
+            SizedBox(height: tokens.s2),
+            Hero(
+              tag: HeroTags.title(album.id),
+              child: Material(
+                color: Colors.transparent,
+                child: Text(
+                  album.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: scale.display20,
+                ),
+              ),
             ),
-            Text(
-              album.artist,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+            Hero(
+              tag: HeroTags.artist(album.id),
+              child: Material(
+                color: Colors.transparent,
+                child: Text(
+                  album.artist,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: scale.caption13.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
               ),
             ),
           ],

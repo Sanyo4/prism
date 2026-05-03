@@ -6,6 +6,7 @@ import 'screens/library_screen.dart';
 import 'screens/new_vibe.dart';
 import 'screens/now_playing_screen.dart';
 import 'screens/queue_screen.dart';
+import 'theme/prism_theme.dart';
 
 /// Root widget — [MaterialApp] + the named routes for the top-level
 /// surfaces.
@@ -35,10 +36,13 @@ class PrismApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Prism',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
-      ),
+      // Slice 7 — composes ColorScheme.fromSeed (default preset blue),
+      // SpaceTokens.mobile, TypographyScale.prism, and the neutral
+      // AlbumPalette into one ThemeData. AlbumDetailScreen and
+      // NowPlayingScreen wrap their subtree in `Theme(data: ..copyWith)`
+      // to override the AlbumPalette per-album; every other route
+      // renders against the neutral palette (slice 7 §2 / §5).
+      theme: PrismTheme.light(),
       initialRoute: libraryRoute,
       routes: {
         libraryRoute: (_) => const LibraryScreen(),

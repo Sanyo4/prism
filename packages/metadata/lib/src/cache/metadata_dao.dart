@@ -164,4 +164,19 @@ class MetadataDao {
       await txn.delete('track_meta');
     });
   }
+
+  /// Deletes a single `metadata_cache` row by `(kind, mbid)`. Slice
+  /// 7 added this for the palette-cache invalidation hook on
+  /// [PaletteRepository.invalidate]; reusing the same cache surface
+  /// for `kind='palette'` rows means we need a per-key delete (the
+  /// existing [clearAll] is too coarse for a one-album invalidation).
+  ///
+  /// Idempotent: missing rows return without error.
+  Future<void> deleteCache(String kind, String mbid) async {
+    await _db.delete(
+      'metadata_cache',
+      where: 'kind = ? AND mbid = ?',
+      whereArgs: [kind, mbid],
+    );
+  }
 }

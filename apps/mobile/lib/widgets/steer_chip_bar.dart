@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_playlist_engine/playlist_engine.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../providers/radio_providers.dart';
 
@@ -51,6 +52,7 @@ class SteerChipBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(radioSessionProvider);
     if (session == null) return const SizedBox.shrink();
+    final tokens = Theme.of(context).extension<SpaceTokens>()!;
     final activeChips = session.chips;
     final activeKey = _activeChipsKey(activeChips);
 
@@ -63,9 +65,9 @@ class SteerChipBar extends ConsumerWidget {
         child: ListView.separated(
           key: ValueKey<int>(activeKey),
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: EdgeInsets.symmetric(horizontal: tokens.s4, vertical: tokens.s1 + 2),
           itemCount: visualOrder.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 8),
+          separatorBuilder: (_, _) => SizedBox(width: tokens.s2),
           itemBuilder: (context, i) {
             final chip = visualOrder[i];
             final state = activeChips[chip];

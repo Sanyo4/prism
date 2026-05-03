@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // TODO(slice-6-integration): tighten to the slice-6 barrel once
 // Track B exports `OllamaHealthStatus`.
 import 'package:prism_llm_desktop/llm_desktop.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../providers/llm_providers.dart';
 import '../shell/app_shell.dart';
@@ -18,6 +19,8 @@ class AiTabScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     final healthAsync = ref.watch(ollamaHealthProvider);
     final status = healthAsync.asData?.value.status;
     final canCompose = status == OllamaHealthStatus.up;
@@ -25,14 +28,16 @@ class AiTabScreen extends ConsumerWidget {
     return AppShell(
       title: 'AI',
       currentTab: AppTab.ai,
+      // Slice 7 §13 — AI tab uses the lilac-leaning AuroraVariant.ai.
+      useAurora: AuroraVariant.ai,
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(tokens.s6),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.all(tokens.s6),
                 child: Column(
                   children: [
                     Icon(
@@ -40,22 +45,22 @@ class AiTabScreen extends ConsumerWidget {
                       size: 48,
                       color: theme.colorScheme.primary,
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: tokens.s4),
                     Text(
                       'Compose a vibe',
-                      style: theme.textTheme.headlineSmall,
+                      style: scale.display20,
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: tokens.s2),
                     Text(
                       'Describe a mood, era, or moment in your own '
                       'words. Prism will assemble a 12-track '
                       'playlist that fits.',
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium?.copyWith(
+                      style: scale.body16.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    SizedBox(height: tokens.s6),
                     FilledButton.icon(
                       onPressed: canCompose
                           ? () => Navigator.of(context)
@@ -66,7 +71,7 @@ class AiTabScreen extends ConsumerWidget {
                     ),
                     if (!canCompose)
                       Padding(
-                        padding: const EdgeInsets.only(top: 16),
+                        padding: EdgeInsets.only(top: tokens.s4),
                         child: Text(
                           status == OllamaHealthStatus.upModelMissing
                               ? 'Pull qwen3:1.7b in Settings → LLM '
@@ -74,7 +79,7 @@ class AiTabScreen extends ConsumerWidget {
                               : 'Ollama is unreachable. See Settings → '
                                   'LLM for setup.',
                           textAlign: TextAlign.center,
-                          style: theme.textTheme.bodySmall?.copyWith(
+                          style: scale.caption13.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),

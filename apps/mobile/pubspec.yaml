@@ -23,6 +23,10 @@ dependencies:
   prism_metadata: any
   prism_playback: any
   prism_playlist_engine: any
+  # Slice 7 — Track A's UI primitives (typography, spacing, palette,
+  # Glass, AuroraBackground, hero tag builders). Track B (this app)
+  # composes them into ThemeData via `lib/theme/prism_theme.dart`.
+  prism_ui: any
 
   # Direct runtime deps (tight surface for slice 1)
   just_audio: ^0.10.5
@@ -44,6 +48,12 @@ dependencies:
   device_info_plus: ^11.2.0
   dio: ^5.7.0
   path: ^1.9.0
+  # Slice 7 — palette extraction (Track B's PaletteRepository),
+  # typography fallback (google_fonts in offline-only mode), and
+  # SHA-1 hashing of art URLs for the metadata_cache palette key.
+  palette_generator: ^0.3.3+5
+  google_fonts: ^6.2.1
+  crypto: ^3.0.6
   # Android 13+ (API 33) made POST_NOTIFICATIONS a runtime permission.
   # `audio_service` does not ship a requester of its own, so we use
   # `permission_handler` to prompt on first launch. Slice 1 accepts
@@ -67,3 +77,8 @@ flutter:
     - native/android/arm64-v8a/vec0.so
     - native/android/x86_64/vec0.so
     - native/linux/x86_64/vec0.so
+  # Slice 7 — typography is Space Grotesk via `google_fonts`. The
+  # package fetches + caches the OFL-licensed TTF on first launch
+  # (`allowRuntimeFetching = true` in main.dart); no asset bundle
+  # entry is required. Slice 8 can promote the TTFs to bundled
+  # assets here for guaranteed offline rendering on the phone.

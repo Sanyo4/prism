@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_core/core.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../providers/ingest_providers.dart';
 import '../providers/playback_providers.dart';
@@ -24,19 +25,20 @@ class _VibeBrowseScreenState extends ConsumerState<VibeBrowseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<SpaceTokens>()!;
     final results = ref.watch(vibeResultsProvider(
       (mood: _mood, band: _band),
     ));
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: EdgeInsets.fromLTRB(tokens.s4, tokens.s3, tokens.s4, tokens.s2),
           child: SizedBox(
             height: 44,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: VibeMoodChip.values.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              separatorBuilder: (_, _) => SizedBox(width: tokens.s2),
               itemBuilder: (context, i) {
                 final chip = VibeMoodChip.values[i];
                 return FilterChip(
@@ -52,7 +54,7 @@ class _VibeBrowseScreenState extends ConsumerState<VibeBrowseScreen> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: tokens.s4, vertical: tokens.s2),
           child: Center(
             child: TempoBandChips(
               selected: _band,
@@ -169,24 +171,26 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(tokens.s6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.tune_outlined,
                 size: 48, color: theme.colorScheme.onSurfaceVariant),
-            const SizedBox(height: 16),
+            SizedBox(height: tokens.s4),
             Text(
               'Nothing in this vibe yet.',
-              style: theme.textTheme.titleMedium,
+              style: scale.display20,
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: tokens.s2),
             Text(
               'Try a different mood or tempo, or Re-scan after running the desktop indexer.',
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: scale.body16.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
               textAlign: TextAlign.center,

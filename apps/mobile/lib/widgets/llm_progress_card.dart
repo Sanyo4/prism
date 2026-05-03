@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 // TODO(slice-6-integration): tighten to the playlist_engine barrel
 // once Track A appends the slice-6 exports.
 import 'package:prism_playlist_engine/llm_backend.dart';
+import 'package:prism_ui/ui.dart';
 
 /// Single Material-3 card the New Vibe sheet renders while the
 /// pipeline is running. Shows:
@@ -69,10 +70,12 @@ class _LlmProgressCardState extends State<LlmProgressCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return Card(
-      margin: const EdgeInsets.all(16),
+      margin: EdgeInsets.all(tokens.s4),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 16),
+        padding: EdgeInsets.fromLTRB(tokens.s4, tokens.s3, tokens.s2, tokens.s4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -88,7 +91,7 @@ class _LlmProgressCardState extends State<LlmProgressCard> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: tokens.s2),
             ConstrainedBox(
               constraints: const BoxConstraints(
                 maxHeight: 180,
@@ -100,7 +103,7 @@ class _LlmProgressCardState extends State<LlmProgressCard> {
                   widget.tokenPreview.isEmpty
                       ? '…'
                       : widget.tokenPreview,
-                  style: theme.textTheme.bodySmall?.copyWith(
+                  style: scale.caption13.copyWith(
                     fontFamily: 'monospace',
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

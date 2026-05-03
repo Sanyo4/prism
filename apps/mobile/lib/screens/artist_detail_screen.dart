@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_core/core.dart';
 import 'package:prism_playlist_engine/playlist_engine.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../browse/artist_view.dart';
 import '../providers/metadata_providers.dart';
@@ -52,10 +53,12 @@ class _ArtistDetailBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return Scaffold(
       appBar: AppBar(title: Text(artist.name)),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(tokens.s4),
         children: [
           // Slice 5 — long-press the avatar / header strip to start
           // radio from the artist seed.
@@ -69,33 +72,33 @@ class _ArtistDetailBody extends ConsumerWidget {
                 radius: 56,
                 child: Text(
                   _initials(artist.name),
-                  style: theme.textTheme.headlineSmall,
+                  style: scale.display20,
                 ),
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: tokens.s3),
           Center(
             child: Text(
               '${artist.albumCount} albums · ${artist.trackCount} tracks',
-              style: theme.textTheme.bodySmall?.copyWith(
+              style: scale.caption13.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: tokens.s6),
           if (artist.mbid != null)
             _LastfmBio(mbid: artist.mbid!),
           if (artist.mbid == null) const _NoMbidNudge(),
-          const SizedBox(height: 16),
-          Text('Albums', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
+          SizedBox(height: tokens.s4),
+          Text('Albums', style: scale.display20),
+          SizedBox(height: tokens.s2),
           SizedBox(
             height: 220,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: artist.albums.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 12),
+              separatorBuilder: (context, index) => SizedBox(width: tokens.s3),
               itemBuilder: (context, i) {
                 final a = artist.albums[i];
                 return AlbumTile(
@@ -107,8 +110,8 @@ class _ArtistDetailBody extends ConsumerWidget {
               },
             ),
           ),
-          const SizedBox(height: 24),
-          Text('Top tracks', style: theme.textTheme.titleMedium),
+          SizedBox(height: tokens.s6),
+          Text('Top tracks', style: scale.display20),
           for (final t in artist.topTracks)
             ListTile(
               dense: true,
@@ -148,10 +151,12 @@ class _LastfmBio extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final infoAsync = ref.watch(artistInfoProvider(mbid));
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return infoAsync.when(
-      loading: () => const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: LinearProgressIndicator(minHeight: 2),
+      loading: () => Padding(
+        padding: EdgeInsets.symmetric(vertical: tokens.s2),
+        child: const LinearProgressIndicator(minHeight: 2),
       ),
       error: (err, stack) => const SizedBox.shrink(),
       data: (info) {
@@ -163,9 +168,9 @@ class _LastfmBio extends ConsumerWidget {
               info.bio,
               maxLines: 6,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium,
+              style: scale.body16,
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: tokens.s2),
             Wrap(
               spacing: 6,
               children: [
@@ -184,15 +189,18 @@ class _NoBlurbNudge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.symmetric(vertical: tokens.s1),
       child: Text(
         'No biography available. Add a Last.fm API key in Settings to '
         'fetch artist details.',
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontStyle: FontStyle.italic,
-            ),
+        style: scale.caption13.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          fontStyle: FontStyle.italic,
+        ),
       ),
     );
   }
@@ -203,15 +211,18 @@ class _NoMbidNudge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.symmetric(vertical: tokens.s1),
       child: Text(
         'No MusicBrainz match yet. Run a fresh scan with online metadata '
         'enabled to fetch artist info.',
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontStyle: FontStyle.italic,
-            ),
+        style: scale.caption13.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          fontStyle: FontStyle.italic,
+        ),
       ),
     );
   }

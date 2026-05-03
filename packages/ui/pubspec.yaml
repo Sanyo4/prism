@@ -1,0 +1,29 @@
+name: prism_ui
+description: |
+  Pure-Dart Flutter UI primitives for Prism — typography, spacing,
+  album palette, frosted Glass, and AuroraBackground variants.
+  Shared across the mobile app's screens; the only "design system"
+  package in the tree.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.11.0
+  flutter: ">=3.27.0"
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  palette_generator: ^0.3.3+5
+  google_fonts: ^6.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  assets:
+    - assets/grain.png

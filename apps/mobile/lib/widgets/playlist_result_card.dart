@@ -4,6 +4,7 @@ import 'package:prism_core/core.dart' hide KnnHit;
 // Track A's barrel re-exports the slice-6 types; the secondary
 // import on `playlist_result.dart` is now redundant.
 import 'package:prism_playlist_engine/playlist_engine.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../providers/playback_providers.dart';
 import '../providers/playlist_engine_providers.dart';
@@ -49,11 +50,13 @@ class PlaylistResultCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     final candidates = result.candidates;
     return Stack(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+          padding: EdgeInsets.fromLTRB(tokens.s4, tokens.s3, tokens.s4, 96),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -62,7 +65,7 @@ class PlaylistResultCard extends ConsumerWidget {
                   Expanded(
                     child: Text(
                       result.blurb,
-                      style: theme.textTheme.titleMedium?.copyWith(
+                      style: scale.display20.copyWith(
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -75,7 +78,7 @@ class PlaylistResultCard extends ConsumerWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: tokens.s2),
               Expanded(
                 child: ListView.builder(
                   itemCount: candidates.length,
@@ -93,8 +96,8 @@ class PlaylistResultCard extends ConsumerWidget {
           ),
         ),
         Positioned(
-          right: 16,
-          bottom: 16,
+          right: tokens.s4,
+          bottom: tokens.s4,
           child: FloatingActionButton.extended(
             onPressed: () {
               _playFrom(ref, 0);
@@ -141,13 +144,14 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scale = theme.extension<TypographyScale>()!;
     return ListTile(
       leading: SizedBox(
         width: 24,
         child: Text(
           number.toString(),
           textAlign: TextAlign.right,
-          style: theme.textTheme.bodyMedium?.copyWith(
+          style: scale.body16.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
@@ -156,16 +160,18 @@ class _Row extends StatelessWidget {
         meta.title.isEmpty ? 'Track ${meta.trackId}' : meta.title,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
+        style: scale.body16,
       ),
       subtitle: Text(
         meta.artistKey,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
+        style: scale.caption13,
       ),
       trailing: meta.bpm > 0
           ? Text(
               '${meta.bpm.toStringAsFixed(0)} bpm',
-              style: theme.textTheme.bodySmall?.copyWith(
+              style: scale.caption13.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             )

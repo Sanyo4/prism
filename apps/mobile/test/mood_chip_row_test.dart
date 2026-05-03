@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile/theme/prism_theme.dart';
 import 'package:mobile/widgets/mood_chip_row.dart';
 import 'package:prism_core/core.dart';
 
@@ -7,9 +8,13 @@ void main() {
   group('MoodChipRow', () {
     testWidgets('renders five chips in locked order Happy/Sad/Chill/Energetic/Focus',
         (tester) async {
+      // Slice 7 — every consumer reads SpaceTokens / TypographyScale
+      // from `Theme.of(context).extension<...>()!`. The test wraps in
+      // `PrismTheme.light()` so the extensions land in `ThemeData`.
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(body: MoodChipRow()),
+        MaterialApp(
+          theme: PrismTheme.light(),
+          home: const Scaffold(body: MoodChipRow()),
         ),
       );
       await tester.pumpAndSettle();

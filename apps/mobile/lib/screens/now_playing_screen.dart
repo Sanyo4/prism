@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:prism_core/core.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../providers/playback_providers.dart';
 import '../shell/app_shell.dart';
+import '../theme/palette_providers.dart';
 import '../widgets/radio_badge.dart';
 import '../widgets/steer_chip_bar.dart';
 
@@ -17,13 +19,11 @@ import '../widgets/steer_chip_bar.dart';
 /// - [playerStateProvider] → play/pause icon + disabled state during
 ///   buffering.
 ///
-/// Scrub handling uses local state (`_scrubValue`) to pause the flow
-/// of [positionProvider] updates into the slider while the user is
-/// dragging — otherwise every 60 Hz tick would yank the thumb back to
-/// the real playhead mid-drag.
-///
-/// Visuals are plain Material 3 — slice 7 replaces the whole screen
-/// with hero art, adaptive palette, and custom typography.
+/// Slice 7 §8 step 10 — wraps the whole subtree in `Theme(data:
+/// ..copyWith)` so [AlbumPalette] flows through to the scrub-bar fill,
+/// the play-button gradient, and the `Glass` tint behind the metadata
+/// strip. Aurora variant is `player`; the accent override pipes the
+/// resolved dominant into the primary blob.
 class NowPlayingScreen extends ConsumerStatefulWidget {
   const NowPlayingScreen({super.key});
 
@@ -44,44 +44,78 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final duration = ref.watch(durationProvider).value ?? track?.duration;
     final playerState = ref.watch(playerStateProvider).value;
 
-    return AppShell(
-      title: 'Now Playing',
-      currentTab: AppTab.nowPlaying,
-      child: track == null
-          ? const _IdleView()
-          : _PlayerView(
-              track: track,
-              position: position,
-              duration: duration,
-              playerState: playerState,
-              scrubSeconds: _scrubSeconds,
-              onScrubChange: (v) => setState(() => _scrubSeconds = v),
-              onScrubEnd: (v) {
-                // ignore: discarded_futures
-                ref
-                    .read(playbackServiceProvider)
-                    .seek(Duration(milliseconds: (v * 1000).round()));
-                setState(() => _scrubSeconds = null);
-              },
-              onPlayPause: () {
-                final service = ref.read(playbackServiceProvider);
-                // ignore: discarded_futures
-                if (service.playing) {
-                  service.pause();
-                } else {
-                  service.play();
-                }
-              },
-              onPrevious: () {
-                // ignore: discarded_futures
-                ref.read(playbackServiceProvider).skipToPrevious();
-              },
-              onNext: () {
-                // ignore: discarded_futures
-                ref.read(playbackServiceProvider).skipToNext();
-              },
-            ),
+    final palette = _resolvePalette(track);
+    final theme = Theme.of(context);
+
+    return Theme(
+      data: theme.copyWith(
+        // Slice 7 §8 step 10: now-playing forces the AuroraVariant
+        // to `player` so the primary blob honors the override.
+        extensions: _withPalette(
+          theme,
+          palette.copyWith(variant: AuroraVariant.player),
+        ),
+      ),
+      child: AppShell(
+        title: 'Now Playing',
+        currentTab: AppTab.nowPlaying,
+        useAurora: AuroraVariant.player,
+        auroraAccentOverride:
+            palette.isNeutral ? null : palette.dominant,
+        child: track == null
+            ? const _IdleView()
+            : _PlayerView(
+                track: track,
+                position: position,
+                duration: duration,
+                playerState: playerState,
+                palette: palette,
+                scrubSeconds: _scrubSeconds,
+                onScrubChange: (v) => setState(() => _scrubSeconds = v),
+                onScrubEnd: (v) {
+                  // ignore: discarded_futures
+                  ref
+                      .read(playbackServiceProvider)
+                      .seek(Duration(milliseconds: (v * 1000).round()));
+                  setState(() => _scrubSeconds = null);
+                },
+                onPlayPause: () {
+                  final service = ref.read(playbackServiceProvider);
+                  // ignore: discarded_futures
+                  if (service.playing) {
+                    service.pause();
+                  } else {
+                    service.play();
+                  }
+                },
+                onPrevious: () {
+                  // ignore: discarded_futures
+                  ref.read(playbackServiceProvider).skipToPrevious();
+                },
+                onNext: () {
+                  // ignore: discarded_futures
+                  ref.read(playbackServiceProvider).skipToNext();
+                },
+              ),
+      ),
     );
+  }
+
+  /// Mirrors [AlbumDetailScreen]'s palette resolver, keyed by the
+  /// track's album-derived key. Until art metadata is wired into the
+  /// playback queue we have no `coverUrl` per track — falls through to
+  /// neutral and the screen renders against the default preset
+  /// (slice 7 §10 risk 9).
+  AlbumPalette _resolvePalette(Track? track) {
+    if (track == null) return const AlbumPalette.neutral();
+    // The mobile app currently surfaces album art via the
+    // [albumsProvider] aggregation. NowPlayingScreen does not have
+    // direct access to that art URL on the Track row; until slice 8
+    // pipes art into PlaybackService we rely on the neutral palette
+    // here. Hook left open via [paletteForProvider] for the upgrade.
+    final repoAsync = ref.watch(paletteRepositoryProvider);
+    if (!repoAsync.hasValue) return const AlbumPalette.neutral();
+    return const AlbumPalette.neutral();
   }
 }
 
@@ -90,10 +124,11 @@ class _IdleView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    final tokens = Theme.of(context).extension<SpaceTokens>()!;
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Text(
+        padding: EdgeInsets.all(tokens.s6),
+        child: const Text(
           'Nothing is playing.\n\nTap a track on the Tracks tab to start.',
           textAlign: TextAlign.center,
         ),
@@ -108,6 +143,7 @@ class _PlayerView extends StatelessWidget {
     required this.position,
     required this.duration,
     required this.playerState,
+    required this.palette,
     required this.scrubSeconds,
     required this.onScrubChange,
     required this.onScrubEnd,
@@ -120,6 +156,7 @@ class _PlayerView extends StatelessWidget {
   final Duration position;
   final Duration? duration;
   final PlayerState? playerState;
+  final AlbumPalette palette;
   final double? scrubSeconds;
   final ValueChanged<double> onScrubChange;
   final ValueChanged<double> onScrubEnd;
@@ -130,6 +167,8 @@ class _PlayerView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     final durationSeconds =
         duration == null ? 0.0 : duration!.inMilliseconds / 1000.0;
     final positionSeconds =
@@ -140,8 +179,14 @@ class _PlayerView extends StatelessWidget {
             ProcessingState.loading ||
         playerState?.processingState == ProcessingState.buffering;
 
+    final scrubColor =
+        palette.isNeutral ? theme.colorScheme.primary : palette.dominant;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.s6,
+        vertical: tokens.s8,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -151,57 +196,83 @@ class _PlayerView extends StatelessWidget {
             alignment: AlignmentDirectional.centerStart,
             child: RadioBadge(),
           ),
-          // Metadata strip — single column so it wraps cleanly on the
-          // Pixel 9 Pro Fold's outer screen without a specialised layout.
-          Text(
-            _displayTitle(track),
-            style: theme.textTheme.headlineSmall,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            track.artist ?? track.albumArtist ?? 'Unknown artist',
-            style: theme.textTheme.titleMedium
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (track.album != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              track.album!,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          // Slice 7 — wrap the metadata strip in Glass(medium) so the
+          // album-tinted blob underneath stays legible behind the type.
+          Glass(
+            intensity: GlassIntensity.medium,
+            radius: tokens.s4,
+            tint: palette.isNeutral ? null : palette.dominant,
+            padding: EdgeInsets.all(tokens.s4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _displayTitle(track),
+                  style: scale.display28,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                SizedBox(height: tokens.s1),
+                Text(
+                  track.artist ?? track.albumArtist ?? 'Unknown artist',
+                  style: scale.body16.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (track.album != null) ...[
+                  SizedBox(height: tokens.s1),
+                  Text(
+                    track.album!,
+                    style: scale.caption13.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
             ),
-          ],
+          ),
           const Spacer(),
-          // Slice 5: SteerChipBar above the AeroSlider (slice-1's
-          // Slider stand-in). SizedBox.shrink when no radio session.
+          // Slice 5: SteerChipBar above the scrubber. SizedBox.shrink
+          // when no radio session.
           const SteerChipBar(),
-          // Scrubber: min=0, max=duration seconds. When duration is
-          // unknown we render a disabled track at its natural zero so
-          // the layout doesn't jump when the backend probes it.
-          Slider(
-            min: 0,
-            max: canScrub ? durationSeconds : 1.0,
-            value: canScrub
-                ? positionSeconds.clamp(0.0, durationSeconds).toDouble()
-                : 0.0,
-            onChanged: canScrub ? onScrubChange : null,
-            onChangeEnd: canScrub ? onScrubEnd : null,
+          // Scrubber: min=0, max=duration seconds. Slice 7 — tints the
+          // active track segment and thumb with the album dominant.
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: scrubColor,
+              thumbColor: scrubColor,
+              overlayColor: scrubColor.withValues(alpha: 0.16),
+            ),
+            child: Slider(
+              min: 0,
+              max: canScrub ? durationSeconds : 1.0,
+              value: canScrub
+                  ? positionSeconds.clamp(0.0, durationSeconds).toDouble()
+                  : 0.0,
+              onChanged: canScrub ? onScrubChange : null,
+              onChangeEnd: canScrub ? onScrubEnd : null,
+            ),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(_formatDuration(Duration(
-                  milliseconds: (positionSeconds * 1000).round()))),
-              Text(duration == null ? '—:—' : _formatDuration(duration!)),
+              Text(
+                _formatDuration(Duration(
+                    milliseconds: (positionSeconds * 1000).round())),
+                style: scale.caption13,
+              ),
+              Text(
+                duration == null ? '—:—' : _formatDuration(duration!),
+                style: scale.caption13,
+              ),
             ],
           ),
-          const SizedBox(height: 32),
+          SizedBox(height: tokens.s8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -210,19 +281,11 @@ class _PlayerView extends StatelessWidget {
                 icon: const Icon(Icons.skip_previous),
                 onPressed: onPrevious,
               ),
-              IconButton(
-                iconSize: 64,
-                icon: isBuffering
-                    ? const SizedBox(
-                        width: 40,
-                        height: 40,
-                        child:
-                            CircularProgressIndicator(strokeWidth: 3),
-                      )
-                    : Icon(isPlaying
-                        ? Icons.pause_circle
-                        : Icons.play_circle),
-                onPressed: isBuffering ? null : onPlayPause,
+              _PlayPauseButton(
+                palette: palette,
+                isBuffering: isBuffering,
+                isPlaying: isPlaying,
+                onPressed: onPlayPause,
               ),
               IconButton(
                 iconSize: 40,
@@ -231,8 +294,73 @@ class _PlayerView extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: tokens.s4),
         ],
+      ),
+    );
+  }
+}
+
+/// Slice 7 — circular play/pause button with a palette-driven gradient.
+/// Falls back to a flat primary fill when the palette is neutral so a
+/// non-hero surface (slice-7 spec stays neutral on MiniPlayer / queue)
+/// never renders a gradient.
+class _PlayPauseButton extends StatelessWidget {
+  const _PlayPauseButton({
+    required this.palette,
+    required this.isBuffering,
+    required this.isPlaying,
+    required this.onPressed,
+  });
+
+  final AlbumPalette palette;
+  final bool isBuffering;
+  final bool isPlaying;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final fill = palette.isNeutral
+        ? null
+        : LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: <Color>[palette.dominant, palette.secondary],
+          );
+    return Material(
+      color: palette.isNeutral
+          ? theme.colorScheme.primary.withValues(alpha: 0.08)
+          : Colors.transparent,
+      shape: const CircleBorder(),
+      child: Ink(
+        decoration: BoxDecoration(
+          gradient: fill,
+          shape: BoxShape.circle,
+        ),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: isBuffering ? null : onPressed,
+          child: SizedBox(
+            width: 72,
+            height: 72,
+            child: isBuffering
+                ? const Center(
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(strokeWidth: 3),
+                    ),
+                  )
+                : Icon(
+                    isPlaying ? Icons.pause : Icons.play_arrow,
+                    size: 40,
+                    color: palette.isNeutral
+                        ? theme.colorScheme.primary
+                        : palette.textOnDominant,
+                  ),
+          ),
+        ),
       ),
     );
   }
@@ -249,6 +377,21 @@ String _displayTitle(Track t) {
   final base = slash < 0 ? path : path.substring(slash + 1);
   final dot = base.lastIndexOf('.');
   return dot <= 0 ? base : base.substring(0, dot);
+}
+
+/// Replaces the [AlbumPalette] entry in [theme.extensions] with
+/// [palette] and returns the resulting iterable. `theme.extensions`
+/// is `Map<Object, ThemeExtension<dynamic>>`; we strip the existing
+/// `AlbumPalette` (the neutral seed) and append the per-album one.
+Iterable<ThemeExtension<dynamic>> _withPalette(
+  ThemeData theme,
+  AlbumPalette palette,
+) sync* {
+  for (final ext in theme.extensions.values) {
+    if (ext is AlbumPalette) continue;
+    yield ext;
+  }
+  yield palette;
 }
 
 String _formatDuration(Duration d) {

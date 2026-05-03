@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'app.dart';
@@ -11,6 +12,19 @@ import 'providers/playback_providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Slice 7 — typography is Space Grotesk (matching the design
+  // bundle at /tmp/prism-design-extract/...). `google_fonts` fetches
+  // the OFL-licensed TTF from fonts.google.com on first launch and
+  // caches it on disk; subsequent launches resolve from the cache,
+  // never the network. Truly cold-install offline launches fall
+  // through to the platform default sans (Roboto / Cantarell) until
+  // the cache populates — acceptable per slice 7 §11; slice 8 can
+  // bundle the TTFs directly for guaranteed phone-side offline.
+  //
+  // We leave runtime fetching enabled (the package default) so the
+  // first-launch cache populates without a separate setup step.
+  GoogleFonts.config.allowRuntimeFetching = true;
 
   // We construct the container up front so the `PrismAudioHandler`
   // closure and the app tree share one [PlaybackService] instance —

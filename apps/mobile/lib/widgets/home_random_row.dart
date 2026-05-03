@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../browse/album_view.dart';
 import '../providers/metadata_providers.dart';
@@ -27,48 +28,58 @@ class _HomeRandomRowState extends ConsumerState<HomeRandomRow> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     final albumsAsync = ref.watch(albumsProvider);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                "Can't decide?",
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const Spacer(),
-              RefreshIconButton(
-                onPressed: () => setState(() {
-                  _seed ^= DateTime.now().microsecondsSinceEpoch;
-                }),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          albumsAsync.when(
-            loading: () => const SizedBox(
-              height: 156,
-              child: Center(child: CircularProgressIndicator()),
+      padding: EdgeInsets.symmetric(horizontal: tokens.s4, vertical: tokens.s2),
+      child: Glass(
+        intensity: GlassIntensity.light,
+        radius: tokens.s4,
+        padding: EdgeInsets.fromLTRB(tokens.s4, tokens.s3, tokens.s3, tokens.s3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  "Can't decide?",
+                  style: scale.display20,
+                ),
+                const Spacer(),
+                RefreshIconButton(
+                  onPressed: () => setState(() {
+                    _seed ^= DateTime.now().microsecondsSinceEpoch;
+                  }),
+                ),
+              ],
             ),
-            error: (e, _) => SizedBox(
-              height: 156,
-              child: Center(
-                child: Text('Library unavailable', style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                )),
+            SizedBox(height: tokens.s1),
+            albumsAsync.when(
+              loading: () => const SizedBox(
+                height: 156,
+                child: Center(child: CircularProgressIndicator()),
               ),
+              error: (e, _) => SizedBox(
+                height: 156,
+                child: Center(
+                  child: Text(
+                    'Library unavailable',
+                    style: scale.body16
+                        .copyWith(color: theme.colorScheme.error),
+                  ),
+                ),
+              ),
+              data: (albums) => albums.isEmpty
+                  ? const SizedBox(
+                      height: 156,
+                      child: Center(child: Text('No albums yet')),
+                    )
+                  : _Picks(albums: _pick(albums)),
             ),
-            data: (albums) => albums.isEmpty
-                ? const SizedBox(
-                    height: 156,
-                    child: Center(child: Text('No albums yet')),
-                  )
-                : _Picks(albums: _pick(albums)),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -88,12 +99,13 @@ class _Picks extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<SpaceTokens>()!;
     return SizedBox(
       height: 200,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: albums.length,
-        separatorBuilder: (context, index) => const SizedBox(width: 12),
+        separatorBuilder: (context, index) => SizedBox(width: tokens.s3),
         itemBuilder: (context, i) {
           final album = albums[i];
           return AlbumTile(

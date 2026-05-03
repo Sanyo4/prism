@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../providers/metadata_providers.dart';
 import 'settings_sections.dart';
@@ -24,6 +25,7 @@ class SettingsOnlineMetadataSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = Theme.of(context).extension<SpaceTokens>()!;
     final settings = ref.watch(onlineMetadataSettingsProvider);
     final notifier = ref.read(onlineMetadataSettingsProvider.notifier);
     final emailMissing =
@@ -35,9 +37,9 @@ class SettingsOnlineMetadataSection extends ConsumerWidget {
         if (emailMissing)
           Material(
             color: Theme.of(context).colorScheme.tertiaryContainer,
-            child: const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text(
+            child: Padding(
+              padding: EdgeInsets.all(tokens.s3),
+              child: const Text(
                 'Enter a contact email — MusicBrainz refuses anonymous '
                 'traffic.',
               ),
