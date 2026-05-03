@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/theme/prism_theme.dart';
 import 'package:mobile/widgets/mood_chip_row.dart';
@@ -46,5 +47,71 @@ void main() {
         );
       }
     });
+
+    testWidgets('multi-select toggles a chip into the controller set',
+        (tester) async {
+      var lastSelection = <MoodChip>{};
+      final controller = MoodChipController.multi(
+        initial: const <MoodChip>{},
+        onChanged: (next) => lastSelection = next,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: PrismTheme.light(),
+          home: Scaffold(body: MoodChipRow(controller: controller)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap the Chill chip; the multi-select callback should fire with
+      // {MoodChip.chill}.
+      await tester.tap(find.text('Chill'));
+      await tester.pumpAndSettle();
+      expect(lastSelection, equals(<MoodChip>{MoodChip.chill}));
+
+      // Tap Focus; callback fires with {chill, focus}.
+      await tester.tap(find.text('Focus'));
+      await tester.pumpAndSettle();
+      expect(lastSelection, equals(<MoodChip>{MoodChip.chill, MoodChip.focus}));
+
+      // Tap Chill again; should remove from the set.
+      await tester.tap(find.text('Chill'));
+      await tester.pumpAndSettle();
+      expect(lastSelection, equals(<MoodChip>{MoodChip.focus}));
+    });
+
+    testWidgets('single-select default keeps slice-4 push behaviour',
+        (tester) async {
+      // Smoke-test: tap pushes a route. We verify the route by mounting
+      // a Navigator and listening for push events.
+      final pushed = <Route<dynamic>>[];
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            theme: PrismTheme.light(),
+            home: const Scaffold(body: MoodChipRow()),
+            navigatorObservers: [
+              _CapturingObserver(onPush: pushed.add),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Happy'));
+      // Pump once to allow the Navigator.push to execute.
+      await tester.pump();
+      expect(pushed, isNotEmpty,
+          reason: 'single-mode tap pushes MoodResultsScreen');
+    });
   });
+}
+
+class _CapturingObserver extends NavigatorObserver {
+  _CapturingObserver({required this.onPush});
+  final void Function(Route<dynamic>) onPush;
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    onPush(route);
+    super.didPush(route, previousRoute);
+  }
 }

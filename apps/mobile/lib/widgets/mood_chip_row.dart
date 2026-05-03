@@ -4,14 +4,72 @@ import 'package:prism_ui/ui.dart';
 
 import '../screens/mood_results_screen.dart';
 
+/// Selection model for [MoodChipRow]. Two factories:
+///
+/// - [MoodChipController.single] — slice-4 behaviour: a tap navigates
+///   to `MoodResultsScreen` for that chip and the row never holds a
+///   selection. Home consumes this.
+/// - [MoodChipController.multi] — slice-10 behaviour: tap toggles the
+///   chip in/out of [selected]; [onChanged] fires with the resulting
+///   set. SongsShuffleTab consumes this.
+///
+/// Defense against the slice-1..4 widget tests: existing
+/// `mood_chip_row_test.dart` only asserts the locked visual order and
+/// the FilterChip count, both of which the refactor preserves.
+class MoodChipController {
+  /// Internal mode flag — `false` for slice-4 single push, `true` for
+  /// slice-10 multi-select.
+  final bool isMulti;
+
+  /// Currently-selected chips (multi mode only). Always empty in single
+  /// mode — single-mode taps don't accumulate state.
+  final Set<MoodChip> selected;
+
+  /// Multi-mode change callback. `null` in single mode.
+  final ValueChanged<Set<MoodChip>>? onChanged;
+
+  const MoodChipController._({
+    required this.isMulti,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  /// Slice-4 single-select: tap pushes [MoodResultsScreen]. The
+  /// controller carries no selection state.
+  const MoodChipController.single()
+      : this._(isMulti: false, selected: const <MoodChip>{}, onChanged: null);
+
+  /// Slice-10 multi-select: tap toggles into [initial]. [onChanged]
+  /// fires with the resulting set so the parent can refresh its query.
+  /// Note: [selected] is a mutable copy of [initial], so taps can
+  /// directly mutate it (and subsequent taps see the updated state).
+  MoodChipController.multi({
+    required Set<MoodChip> initial,
+    required ValueChanged<Set<MoodChip>> onChanged,
+  }) : this._(isMulti: true, selected: Set.from(initial), onChanged: onChanged);
+}
+
 /// Five Material 3 FilterChips in **locked order**: Happy / Sad / Chill
-/// / Energetic / Focus. Order is enforced by the visualOrder list in
-/// the body — never reorder these without bumping the slice DoD.
+/// / Energetic / Focus. Slice-10 lift adds the multi-select mode via
+/// [controller]; default is the slice-4 single-select push.
 ///
 /// Heights are 44 px (slice 1's placeholder reserved exactly that)
 /// so dropping the row in place doesn't push the rest of Home down.
 class MoodChipRow extends StatelessWidget {
-  const MoodChipRow({super.key});
+  const MoodChipRow({
+    super.key,
+    this.controller = const MoodChipController.single(),
+    this.dim = false,
+  });
+
+  /// Selection / dispatch model. Defaults to single-select for the
+  /// pre-existing Home consumer.
+  final MoodChipController controller;
+
+  /// When `true`, all chips render at 50% opacity (Songs-tab
+  /// True-Shuffle ON state per spec §2.2). The chips remain tappable —
+  /// dimming is purely visual.
+  final bool dim;
 
   /// Locked rendering order. Visible to widget tests so the order can
   /// be asserted without reaching into private state.
@@ -35,23 +93,31 @@ class MoodChipRow extends StatelessWidget {
         separatorBuilder: (_, _) => SizedBox(width: tokens.s2),
         itemBuilder: (context, i) {
           final chip = visualOrder[i];
-          return FilterChip(
-            // FilterChip with selected=false renders as a plain pill —
-            // ideal for the home row where "tap to navigate" is the
-            // intended action, not "toggle". When the user lands on
-            // the results screen the chip becomes selected via the
-            // results screen's own chip row (out of scope for slice 4
-            // — current tap is push + pop).
-            selected: false,
+          final isSelected =
+              controller.isMulti && controller.selected.contains(chip);
+          final body = FilterChip(
+            selected: isSelected,
             label: Text(_label(chip)),
             avatar: Icon(_iconFor(chip), size: 18),
-            onSelected: (_) {
-              Navigator.of(context).push(MoodResultsScreen.route(chip));
-            },
+            onSelected: (_) => _onTap(context, chip),
           );
+          return Opacity(opacity: dim ? 0.5 : 1.0, child: body);
         },
       ),
     );
+  }
+
+  void _onTap(BuildContext context, MoodChip chip) {
+    if (!controller.isMulti) {
+      Navigator.of(context).push(MoodResultsScreen.route(chip));
+      return;
+    }
+    if (controller.selected.contains(chip)) {
+      controller.selected.remove(chip);
+    } else {
+      controller.selected.add(chip);
+    }
+    controller.onChanged?.call(controller.selected);
   }
 
   static String _label(MoodChip chip) {
