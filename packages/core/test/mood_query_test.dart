@@ -227,5 +227,34 @@ void main() {
         );
       });
     });
+
+    group('recencyFactor', () {
+      test('returns 1.0 for now (zero days elapsed)', () {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        expect(
+          recencyFactor(addedAtMs: now, nowMs: now),
+          closeTo(1.0, 1e-9),
+        );
+      });
+
+      test('decays exponentially with age', () {
+        final now = DateTime.utc(2026, 1, 1).millisecondsSinceEpoch;
+        final yearAgo = now - 365 * Duration.millisecondsPerDay;
+        // 0.5 + 0.5 * exp(-1) ≈ 0.6839
+        expect(
+          recencyFactor(addedAtMs: yearAgo, nowMs: now),
+          closeTo(0.5 + 0.5 * 0.36787944117, 1e-6),
+        );
+      });
+
+      test('floor of 0.5 as days → ∞', () {
+        final now = DateTime.utc(2026, 1, 1).millisecondsSinceEpoch;
+        final ancient = now - 100 * 365 * Duration.millisecondsPerDay;
+        expect(
+          recencyFactor(addedAtMs: ancient, nowMs: now),
+          closeTo(0.5, 1e-3),
+        );
+      });
+    });
   });
 }

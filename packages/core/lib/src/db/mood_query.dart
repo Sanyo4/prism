@@ -2,6 +2,16 @@ import 'dart:math' as math;
 
 import 'cache_db.dart';
 
+/// Slice-4 recency factor, lifted into a top-level helper so slice 10's
+/// `VibeShuffleQuery` can reuse the same falloff as `MoodQuery`. Pure
+/// math: `0.5 + 0.5 * exp(-days_since_added / 365)`. Result is always
+/// in `[0.5, 1.0]` — zero-day-old tracks score `1.0`; very old tracks
+/// asymptote to `0.5`.
+double recencyFactor({required int addedAtMs, required int nowMs}) {
+  final days = (nowMs - addedAtMs) / Duration.millisecondsPerDay;
+  return 0.5 + 0.5 * math.exp(-days / 365);
+}
+
 /// The five home-row mood chips, **locked order**: Happy / Sad / Chill
 /// / Energetic / Focus. Visual order is enforced at the UI layer; this
 /// enum just nails the identity.
@@ -118,8 +128,7 @@ class MoodQuery {
     required int addedAtMs,
     required int nowMs,
   }) {
-    final days = (nowMs - addedAtMs) / Duration.millisecondsPerDay;
-    final recency = 0.5 + 0.5 * math.exp(-days / 365);
+    final recency = recencyFactor(addedAtMs: addedAtMs, nowMs: nowMs);
     final play = math.log(1 + playCount);
     // Adding +1 to play keeps unplayed tracks from getting zeroed out
     // — a fresh-from-scan track should still rank by mood confidence
