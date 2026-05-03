@@ -100,6 +100,14 @@ class RadioContextSheet {
           artist: seed.artist,
           label: seed.label,
         );
+      case ClusterSeed():
+        // ClusterSeed never enters the long-press radio context sheet —
+        // clusters seed sessions through the slice-10 'Keep playing'
+        // flow at the end of an AI-Compose playlist. Treat as a no-op
+        // here; the kind labels below still render gracefully so a
+        // diagnostic surface re-using this sheet for a cluster won't
+        // crash.
+        return;
     }
     if (context.mounted) _snack(context, 'Radio started');
   }
@@ -122,6 +130,8 @@ class RadioContextSheet {
         return 'Album';
       case ArtistSeed():
         return 'Artist';
+      case ClusterSeed():
+        return 'Cluster';
     }
   }
 
@@ -133,6 +143,8 @@ class RadioContextSheet {
         return 'album';
       case ArtistSeed():
         return 'artist';
+      case ClusterSeed():
+        return 'cluster';
     }
   }
 }
