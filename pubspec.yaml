@@ -13,6 +13,7 @@ workspace:
   - apps/mobile
   - packages/core
   - packages/llm_desktop
+  - packages/llm_mobile
   - packages/metadata
   - packages/playback
   - packages/playlist_engine

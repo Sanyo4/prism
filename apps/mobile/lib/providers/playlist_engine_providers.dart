@@ -153,7 +153,16 @@ class NewVibeNotifier extends AsyncNotifier<NewVibeState> {
 
     // Subscribe to progress events; coalesce token chunks into the
     // state at 60 ms.
-    final backend = ref.read(ollamaBackendProvider);
+    //
+    // Slice 8: the engine's `generate(...)` call now consumes the
+    // platform-agnostic [llmBackendProvider]. The progress stream
+    // subscription, however, still hangs off the backend's
+    // `progress` getter — which is part of the `LlmBackend`
+    // interface, so it works for both Ollama and Cactus. We resolve
+    // the backend asynchronously (the Android side awaits
+    // `path_provider`); on Linux this is a no-op await against the
+    // cached Ollama backend.
+    final backend = await ref.read(llmBackendProvider.future);
     _progressSub = backend.progress.listen(_onProgress);
 
     final engineInst = ref.read(playlistEngineProvider);
@@ -226,14 +235,27 @@ class NewVibeNotifier extends AsyncNotifier<NewVibeState> {
     _pendingPreview = '';
   }
 
-  /// Cancels the in-flight Ollama request. Routes through the
-  /// backend so its `CancelToken` aborts; the engine future then
-  /// resolves with `PlaylistCancelled` and the `build` catch above
-  /// flips `cancelled: true`.
+  /// Cancels the in-flight backend request.
   ///
-  /// Track B made `OllamaBackend.cancel()` synchronous (sets the
-  /// CancelToken; the underlying dio request aborts on the next
-  /// `read`), so we don't await.
+  /// Slice 6 (desktop / Linux): routes through `OllamaBackend`'s
+  /// `CancelToken`; the engine future resolves with
+  /// `PlaylistCancelled` and the `build` catch above flips
+  /// `cancelled: true`. Track B made `OllamaBackend.cancel()`
+  /// synchronous (sets the CancelToken; the underlying dio request
+  /// aborts on the next `read`), so we don't await.
+  ///
+  /// Slice 8 (Android / Cactus): `LlmBackend` doesn't expose a
+  /// generic `cancel()` — Cactus's cancel path lives inside
+  /// `MobileBackend.chat()`'s `onToken` callback (Track A's doc-
+  /// refresh §10 risk 6). The call below still reads
+  /// `ollamaBackendProvider` because that's where `cancel()`
+  /// lives; on Android the Ollama backend is built but never
+  /// generates anything, so calling `cancel()` is idempotent and
+  /// inert. The Cactus-side `PlaylistCancelled` propagation
+  /// happens via `ref.invalidate(newVibeProvider(vibe))` from the
+  /// New Vibe sheet — invalidating the notifier disposes the
+  /// progress subscription, and the next token throws
+  /// PlaylistCancelled out of the in-flight `chat()`.
   void cancel() {
     final backend = ref.read(ollamaBackendProvider);
     backend.cancel();

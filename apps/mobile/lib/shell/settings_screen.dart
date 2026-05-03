@@ -1,14 +1,20 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../theme/settings_theme_section.dart';
 import 'settings_library.dart';
 import 'settings_llm_section.dart';
+import 'settings_llm_section_mobile.dart';
 import 'settings_online_metadata.dart';
 import 'settings_sections.dart';
 
 /// Settings surface. Slice-1 placeholders → slice-2 metadata section →
-/// slice-4 library re-scan + cache stats. Playback section remains
-/// placeholder until a later slice surfaces the RG toggle.
+/// slice-4 library re-scan + cache stats. Slice 6 added the Ollama LLM
+/// row; slice 7 added the Theme preset picker; slice 8 swaps the Ollama
+/// LLM section for the Cactus-backed [SettingsLlmSectionMobile] on
+/// Android. Playback section remains placeholder until a later slice
+/// surfaces the RG toggle.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -23,21 +29,28 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
-        children: const [
-          SettingsOnlineMetadataSection(),
-          SettingsLibrarySection(),
-          // Slice 6 — LLM section appended below the slice-4 Library
-          // row. Order kept stable so the slice-1 widget test (which
-          // asserts visible section headers via `scrollUntilVisible`)
-          // still resolves "Playback" past this section.
-          SettingsLlmSection(),
+        children: [
+          const SettingsOnlineMetadataSection(),
+          const SettingsLibrarySection(),
+          // Slice 6 / Slice 8 — LLM section appended below the
+          // slice-4 Library row. Section order stays stable so the
+          // slice-1 widget test (which scrolls until "Playback" is
+          // visible) still resolves past this section. Slice 8 swaps
+          // the Ollama-backed `SettingsLlmSection` for the Cactus-
+          // backed `SettingsLlmSectionMobile` on Android only;
+          // Linux desktop keeps the Ollama section so slice 6's
+          // verification still passes.
+          if (Platform.isAndroid)
+            const SettingsLlmSectionMobile()
+          else
+            const SettingsLlmSection(),
           // Slice 7 — Theme preset picker. Sits above Playback so the
           // existing widget test (which scrolls "Playback" into view)
           // still resolves; we deliberately don't reorder slice 1's
           // anchor section.
-          SettingsThemeSection(),
-          SettingsSectionHeader(title: 'Playback'),
-          SettingsSectionPlaceholder(
+          const SettingsThemeSection(),
+          const SettingsSectionHeader(title: 'Playback'),
+          const SettingsSectionPlaceholder(
             subtitle:
                 'ReplayGain toggle and gapless defaults — wired in a later slice.',
           ),

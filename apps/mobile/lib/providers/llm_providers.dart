@@ -9,17 +9,33 @@
 /// - [ollamaClientProvider] — derived `OllamaClient` over a single
 ///   `Dio` instance whose options track the active config.
 /// - [ollamaBackendProvider] — derived `OllamaBackend` (implements
-///   `LlmBackend` from `prism_playlist_engine`); this is what
-///   `playlistEngineProvider`'s `generate()` call consumes.
+///   `LlmBackend` from `prism_playlist_engine`); the slice-6 backend
+///   instance, also surfaced via [llmBackendProvider] on non-Android
+///   platforms.
 /// - [ollamaHealthProvider] — `StreamProvider<OllamaHealth>` that
 ///   polls every 30 s while a listener is active. Settings → LLM
 ///   binds the dot color to the latest `status`.
+/// - [llmBackendProvider] — slice-8 platform seam.
+///   `FutureProvider<LlmBackend>` that defaults to the Ollama backend
+///   above; `apps/mobile/lib/main.dart` overrides this in the root
+///   `ProviderScope` on Android to wrap the Cactus-backed
+///   `MobileBackend` from `llm_providers_mobile.dart`. Slice 6
+///   originally exposed `ollamaBackendProvider` directly to consumers;
+///   slice 8 routes them through this typed seam so the engine is
+///   platform-agnostic at the call site.
 ///
-/// Cancellation contract: closing the New Vibe sheet calls
+/// Cancellation contract (slice 6, unchanged for Linux desktop):
+/// closing the New Vibe sheet calls
 /// `ref.read(ollamaBackendProvider).cancel()`. The backend cancels
 /// the active `dio` request via its `CancelToken`; in-flight
 /// `generate()` futures throw `PlaylistCancelled`, which the notifier
 /// translates to `state = AsyncData(state.copyWith(cancelled: true))`.
+/// On Android the cancel call still routes through this provider
+/// (the slice-8 brief asks for a single-seam reroute through
+/// [llmBackendProvider] but `LlmBackend` doesn't expose `cancel()` —
+/// see the long comment on [llmBackendProvider] below). The
+/// Android-side Cactus cancellation lives inside `MobileBackend`'s
+/// own onToken callback (Track A's doc-refresh §10 risk 6).
 ///
 /// **Track B integration drift (as of Track C kickoff)**:
 /// `prism_llm_desktop` ships only `OllamaConfig`. `OllamaClient`,
@@ -38,6 +54,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // per slice 6 §7. Compilation will fail until Track B lands them;
 // the user reconciles at integration time.
 import 'package:prism_llm_desktop/llm_desktop.dart';
+import 'package:prism_playlist_engine/llm_backend.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// SharedPreferences key for the persisted Ollama base URL.
@@ -150,4 +167,39 @@ final ollamaHealthProvider = StreamProvider<OllamaHealth>((ref) async* {
     final current = ref.read(ollamaBackendProvider);
     yield await current.health();
   }
+});
+
+/// Slice 8 platform seam. The single `LlmBackend` consumed by
+/// `playlistEngineProvider`'s `generate(...)` call. Defaults to the
+/// slice-6 [ollamaBackendProvider]; `apps/mobile/lib/main.dart`
+/// overrides this on Android in the root `ProviderScope` to return
+/// slice-8's Cactus-backed `MobileBackend` from
+/// `llm_providers_mobile.dart`.
+///
+/// **Why a `FutureProvider` rather than a plain `Provider`?** The
+/// Cactus backend needs to resolve `path_provider`'s
+/// `getApplicationDocumentsDirectory()` (an async platform-channel
+/// call) before it can be constructed; a `Provider<LlmBackend>` would
+/// force `MobileBackend` to defer its init internally and complicate
+/// the cancellation contract. The default Ollama path resolves
+/// synchronously and re-emits the singleton; the await is a no-op
+/// on Linux.
+///
+/// **Cancellation seam**: `LlmBackend` doesn't expose `cancel()` —
+/// the desktop slice-6 cancel path is `OllamaBackend`-specific and
+/// the mobile cancel path lives inside `MobileBackend`'s `onToken`
+/// callback (per Track A's doc-refresh §10 risk 6). The slice-8
+/// brief asks for "audit every reference and reroute through
+/// `llmBackendProvider`"; we honour that for the *consumer-side*
+/// `generate(...)` call. The cancel sites in
+/// `playlist_engine_providers.dart` and `screens/new_vibe.dart`
+/// continue to read `ollamaBackendProvider` directly because the
+/// `cancel()` symbol is slice-6-specific. On Android, calling
+/// `ollamaBackendProvider.cancel()` against an unused backend is
+/// idempotent and inert — no in-flight Dio request exists to
+/// cancel, and the Cactus side's cancellation runs through a
+/// different path (`PlaylistCancelled` thrown from inside
+/// `onToken`).
+final llmBackendProvider = FutureProvider<LlmBackend>((ref) async {
+  return ref.watch(ollamaBackendProvider);
 });

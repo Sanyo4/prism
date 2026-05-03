@@ -8,6 +8,9 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'app.dart';
 import 'audio/audio_handler.dart';
+import 'audio/memory_pressure_observer.dart';
+import 'providers/llm_providers.dart';
+import 'providers/llm_providers_mobile.dart';
 import 'providers/playback_providers.dart';
 
 Future<void> main() async {
@@ -31,7 +34,36 @@ Future<void> main() async {
   // building the container before `AudioService.init` is intentional.
   // `audio_service` boots a foreground service + channel and then
   // calls the builder once; the handler needs its service ready.
-  final container = ProviderContainer();
+  //
+  // Slice 8 — overrides applied here:
+  //
+  //   * On Android, `llmBackendProvider` is overridden to read
+  //     `mobileBackendProvider.future` and upcast the resulting
+  //     `MobileBackend` to `LlmBackend`. The Ollama backend stays
+  //     reachable for `cancel()` calls (slice-6 surface) but is
+  //     never invoked for generation.
+  //   * On Linux desktop the override is omitted; `llmBackendProvider`
+  //     defaults to the slice-6 Ollama backend.
+  //
+  // This is the *only* `Platform.isAndroid` branch in the slice-8
+  // platform switch (slice 8 §6 hard rule). Settings → LLM section
+  // selection in `settings_screen.dart` and the connectivity-gate
+  // text inside `model_download_card.dart` are the documented
+  // exceptions.
+  final container = ProviderContainer(
+    overrides: [
+      if (Platform.isAndroid)
+        llmBackendProvider.overrideWith((ref) async {
+          // `mobileBackendProvider` is `Provider<MobileBackend>`;
+          // `MobileBackend implements LlmBackend`, so the upcast is
+          // implicit on return. We still wrap in a FutureProvider
+          // body because `llmBackendProvider` is itself async (the
+          // Linux default reads `ollamaBackendProvider` synchronously
+          // but the type stays async-friendly).
+          return ref.watch(mobileBackendProvider);
+        }),
+    ],
+  );
   final playback = container.read(playbackServiceProvider);
 
   await AudioService.init<PrismAudioHandler>(
@@ -43,6 +75,22 @@ Future<void> main() async {
       androidStopForegroundOnPause: true,
     ),
   );
+
+  // Slice 8 — memory-pressure bridge.
+  // `MemoryPressureObserver` forwards every Android
+  // `ComponentCallbacks2.onTrimMemory(>= RUNNING_LOW)` event into
+  // `memoryPressureNotifierProvider`; the slice-8
+  // `mobileBackendProvider` listens and calls `releaseModel()`.
+  // Linux desktop never fires `didHaveMemoryPressure`, so the
+  // observer is inert there — registration is platform-agnostic and
+  // the listener inside `mobileBackendProvider` is only built on
+  // Android (where the override applies).
+  final memoryObserver = MemoryPressureObserver(
+    onPressure: () async {
+      container.read(memoryPressureNotifierProvider.notifier).fire();
+    },
+  );
+  memoryObserver.register();
 
   // Android 13 (API 33) made POST_NOTIFICATIONS a runtime permission.
   // Request once; the OS guarantees it only prompts one time — after

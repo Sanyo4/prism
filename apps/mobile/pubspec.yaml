@@ -20,6 +20,13 @@ dependencies:
   # Prism workspace packages
   prism_core: any
   prism_llm_desktop: any
+  # Slice 8 — Cactus-backed LlmBackend for Android. The package is
+  # always a dep; its runtime side is gated to Android via the
+  # ProviderScope override in `main.dart`, so Linux desktop pays
+  # only the static-analysis cost (Cactus's pub.dev surface is
+  # platform-agnostic at the Dart level — native binaries are
+  # Android-only).
+  prism_llm_mobile: any
   prism_metadata: any
   prism_playback: any
   prism_playlist_engine: any
@@ -60,6 +67,16 @@ dependencies:
   # one first-launch verification miss if the user denies — playback
   # still works, only the lockscreen transport goes dark.
   permission_handler: ^12.0.0+1
+
+  # Slice 8 — Wi-Fi-only enforcement on the LLM model download
+  # (slice 8 §10 risk 1, §11 item 8). Used by
+  # `providers/llm_providers_mobile.dart`'s `connectivityProvider` +
+  # the gate inside `widgets/model_download_card.dart`. Linux
+  # desktop's behaviour is "no metered connection awareness" — the
+  # provider folds the platform-channel snapshot to `none` on
+  # PlatformException and the Android-only Settings section never
+  # builds, so this dep is inert on Linux.
+  connectivity_plus: ^6.1.0
 
 dev_dependencies:
   flutter_test:
