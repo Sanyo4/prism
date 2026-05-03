@@ -6,6 +6,7 @@ import 'migrations.dart';
 import 'mood_query.dart';
 import 'vec_loader.dart';
 import 'vibe_query.dart';
+import 'vibe_shuffle_query.dart';
 
 /// Per-device disposable cache built by scanning sidecars. Pairs two
 /// SQLite handles on the same file:
@@ -102,6 +103,9 @@ class CacheDb {
 
   /// Vibe browse — classifier-native chips + tempo band.
   VibeQuery get vibes => VibeQuery(this);
+
+  /// Slice 10 — vibe-steered shuffle deck for the Songs tab.
+  VibeShuffleQuery get vibeShuffle => VibeShuffleQuery(this);
 
   /// kNN over [track_embeddings]. Returns a list ordered by ascending
   /// L2 distance with the seed excluded. See [knnByEmbedding] in

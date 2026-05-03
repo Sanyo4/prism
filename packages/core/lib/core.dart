@@ -31,5 +31,6 @@ export 'src/db/track_repo_impl.dart';
 export 'src/db/track_status.dart';
 export 'src/db/vec_loader.dart';
 export 'src/db/vibe_query.dart';
+export 'src/db/vibe_shuffle_query.dart';
 export 'src/ingest/ingest_coordinator.dart';
 export 'src/ingest/upsert.dart';
