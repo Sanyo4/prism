@@ -50,34 +50,43 @@ void main() {
 
     testWidgets('multi-select toggles a chip into the controller set',
         (tester) async {
-      var lastSelection = <MoodChip>{};
-      final controller = MoodChipController.multi(
-        initial: const <MoodChip>{},
-        onChanged: (next) => lastSelection = next,
-      );
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: PrismTheme.light(),
-          home: Scaffold(body: MoodChipRow(controller: controller)),
-        ),
-      );
-      await tester.pumpAndSettle();
+      var selection = <MoodChip>{};
 
-      // Tap the Chill chip; the multi-select callback should fire with
-      // {MoodChip.chill}.
+      // Helper: rebuild the widget with a fresh controller carrying the
+      // current selection. Mirrors the production "parent owns state"
+      // pattern — taps emit a new Set, the parent updates state, the
+      // next rebuild constructs a fresh controller with that state.
+      Future<void> pump() async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: PrismTheme.light(),
+            home: Scaffold(
+              body: MoodChipRow(
+                controller: MoodChipController.multi(
+                  initial: selection,
+                  onChanged: (next) => selection = next,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await pump();
       await tester.tap(find.text('Chill'));
       await tester.pumpAndSettle();
-      expect(lastSelection, equals(<MoodChip>{MoodChip.chill}));
+      expect(selection, equals(<MoodChip>{MoodChip.chill}));
 
-      // Tap Focus; callback fires with {chill, focus}.
+      await pump();
       await tester.tap(find.text('Focus'));
       await tester.pumpAndSettle();
-      expect(lastSelection, equals(<MoodChip>{MoodChip.chill, MoodChip.focus}));
+      expect(selection, equals(<MoodChip>{MoodChip.chill, MoodChip.focus}));
 
-      // Tap Chill again; should remove from the set.
+      await pump();
       await tester.tap(find.text('Chill'));
       await tester.pumpAndSettle();
-      expect(lastSelection, equals(<MoodChip>{MoodChip.focus}));
+      expect(selection, equals(<MoodChip>{MoodChip.focus}));
     });
 
     testWidgets('single-select default keeps slice-4 push behaviour',

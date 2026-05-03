@@ -41,12 +41,10 @@ class MoodChipController {
 
   /// Slice-10 multi-select: tap toggles into [initial]. [onChanged]
   /// fires with the resulting set so the parent can refresh its query.
-  /// Note: [selected] is a mutable copy of [initial], so taps can
-  /// directly mutate it (and subsequent taps see the updated state).
-  MoodChipController.multi({
+  const MoodChipController.multi({
     required Set<MoodChip> initial,
     required ValueChanged<Set<MoodChip>> onChanged,
-  }) : this._(isMulti: true, selected: Set.from(initial), onChanged: onChanged);
+  }) : this._(isMulti: true, selected: initial, onChanged: onChanged);
 }
 
 /// Five Material 3 FilterChips in **locked order**: Happy / Sad / Chill
@@ -112,12 +110,13 @@ class MoodChipRow extends StatelessWidget {
       Navigator.of(context).push(MoodResultsScreen.route(chip));
       return;
     }
-    if (controller.selected.contains(chip)) {
-      controller.selected.remove(chip);
+    final next = Set<MoodChip>.from(controller.selected);
+    if (next.contains(chip)) {
+      next.remove(chip);
     } else {
-      controller.selected.add(chip);
+      next.add(chip);
     }
-    controller.onChanged?.call(controller.selected);
+    controller.onChanged?.call(next);
   }
 
   static String _label(MoodChip chip) {
