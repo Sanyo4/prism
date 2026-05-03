@@ -6,31 +6,29 @@ import 'screens/library_screen.dart';
 import 'screens/new_vibe.dart';
 import 'screens/now_playing_screen.dart';
 import 'screens/queue_screen.dart';
+import 'screens/search_screen.dart';
+import 'shell/app_shell.dart';
 import 'theme/prism_theme.dart';
 
 /// Root widget — [MaterialApp] + the named routes for the top-level
 /// surfaces.
 ///
-/// Slice 2 changes:
-/// - replaces `tracksRoute` body (was `TracksScreen`) with the
-///   5-tab [LibraryScreen]; the route name is preserved so the
-///   bottom-nav handler in `AppShell` keeps working.
-/// - introduces `homeRoute` for [HomeScreen] (the "Can't decide?"
-///   surface); slice 7 will move it ahead of Library in the bottom
-///   nav. For slice 2 it's reachable only via deep link / future
-///   navigation entries.
+/// Restructured to match the wireframe (`wireframe/music/`):
+/// - bottom nav has four tabs (Home / Search / Library / Create) and
+///   `/` is the Home greeting + featured grid surface (was Library);
+/// - Now Playing is no longer a bottom tab — the [MiniPlayer] in
+///   [AppShell] presents [NowPlayingScreen] as a full-screen overlay
+///   route on tap, matching `wireframe/music/screens/mobile-detail.jsx`;
+/// - Queue is reachable from inside the Now Playing overlay's bottom
+///   utility row, not as a top-level destination.
 ///
-/// The backfill queue kicks off from inside [LibraryScreen] (its
+/// The backfill queue still kicks off from inside [LibraryScreen] (its
 /// providers chain pulls `backfillKickoffProvider` to start the
 /// queue when the user actually sees the library). Doing it from the
 /// root would force the metadata repository — and therefore
-/// `path_provider` — into every widget test that pumps `PrismApp`.
+/// `path_provider` — into every widget test that pumps [PrismApp].
 class PrismApp extends StatelessWidget {
   const PrismApp({super.key});
-
-  // Route names (kept here so consumers don't drift).
-  static const homeRoute = '/home';
-  static const libraryRoute = '/'; // matches AppShell.tracksRoute by intent
 
   @override
   Widget build(BuildContext context) {
@@ -43,14 +41,18 @@ class PrismApp extends StatelessWidget {
       // to override the AlbumPalette per-album; every other route
       // renders against the neutral palette (slice 7 §2 / §5).
       theme: PrismTheme.light(),
-      initialRoute: libraryRoute,
+      initialRoute: AppShell.homeRoute,
       routes: {
-        libraryRoute: (_) => const LibraryScreen(),
-        homeRoute: (_) => const HomeScreen(),
+        AppShell.homeRoute: (_) => const HomeScreen(),
+        AppShell.searchRoute: (_) => const SearchScreen(),
+        AppShell.libraryRoute: (_) => const LibraryScreen(),
+        AppShell.aiRoute: (_) => const AiTabScreen(),
+        // Now Playing is normally pushed as an overlay by the
+        // [MiniPlayer] in [AppShell], but the named route is kept so
+        // deep links and external Cast handoffs land on the same
+        // screen.
         '/now-playing': (_) => const NowPlayingScreen(),
         '/queue': (_) => const QueueScreen(),
-        // Slice 6 — AI tab landing + the New Vibe sheet.
-        '/ai': (_) => const AiTabScreen(),
         NewVibeSheet.routeName: (_) => const NewVibeSheet(),
       },
     );

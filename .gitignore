@@ -50,3 +50,15 @@ apps/indexer/tests/fixtures/library/
 # OS
 .DS_Store
 Thumbs.db
+
+# Wireframe — track only the JSX source the spec references
+# (wireframe/music/screens/*.jsx + frames/ + ui/ + data/). Skip:
+#   - the redundant zip archive,
+#   - any *Standalone*.html (1.4M bundled export, regenerable),
+#   - paste-artifact uploads (1MB+ screenshots, regenerable).
+# The two non-Standalone HTMLs (≤24K) stay because they're tiny and
+# carry the exact prop wiring the .jsx files expand into.
+wireframe/music.zip
+wireframe/*.html
+wireframe/music/*Standalone*.html
+wireframe/music/uploads/

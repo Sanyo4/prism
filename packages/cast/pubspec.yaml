@@ -37,7 +37,7 @@ dependencies:
   # `ffmpeg_kit_flutter_new` is the maintained successor (publisher
   # `sk3llo`) and exposes the same FFmpegKit API. Audio-only build
   # flavor configured per the package README.
-  ffmpeg_kit_flutter_new: ^3.2.0
+  ffmpeg_kit_flutter_new: ^4.1.0
 
 dev_dependencies:
   flutter_test:

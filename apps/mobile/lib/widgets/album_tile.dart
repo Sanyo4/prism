@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:prism_ui/ui.dart';
 
 import '../browse/album_view.dart';
+import 'embedded_art.dart';
 import 'prism_art_cache_manager.dart';
 
 /// One album tile: cover art on top, two-line title/artist beneath.
@@ -54,6 +55,9 @@ class AlbumTile extends StatelessWidget {
                     coverUrl: album.coverUrl,
                     cacheKey: album.releaseMbid,
                     fallbackSeed: album.id,
+                    embeddedArtPath: album.tracks.isEmpty
+                        ? null
+                        : album.tracks.first.path,
                   ),
                 ),
               ),
@@ -97,25 +101,71 @@ class _Cover extends StatelessWidget {
     required this.coverUrl,
     required this.fallbackSeed,
     this.cacheKey,
+    this.embeddedArtPath,
   });
 
   final String? coverUrl;
   final String? cacheKey;
   final String fallbackSeed;
 
+  /// Absolute path to a track that may carry embedded artwork. When
+  /// [coverUrl] is null (no CAA match yet — common for personal /
+  /// rare albums) we fall through to the FLAC PICTURE block / ID3
+  /// APIC frame on this file before painting the gradient.
+  final String? embeddedArtPath;
+
   @override
   Widget build(BuildContext context) {
     final url = coverUrl;
     if (url == null) {
-      return _GradientFallback(seed: fallbackSeed);
+      return _EmbeddedOrGradient(
+        artPath: embeddedArtPath,
+        fallbackSeed: fallbackSeed,
+      );
     }
     return CachedNetworkImage(
       imageUrl: url,
       cacheKey: cacheKey,
       cacheManager: PrismArtCacheManager(),
       fit: BoxFit.cover,
-      placeholder: (context, url) => _GradientFallback(seed: fallbackSeed),
-      errorWidget: (context, url, error) =>
+      placeholder: (context, url) => _EmbeddedOrGradient(
+        artPath: embeddedArtPath,
+        fallbackSeed: fallbackSeed,
+      ),
+      errorWidget: (context, url, error) => _EmbeddedOrGradient(
+        artPath: embeddedArtPath,
+        fallbackSeed: fallbackSeed,
+      ),
+    );
+  }
+}
+
+/// Renders the embedded art at [artPath] when present, or the
+/// pastel gradient stamped with `Icons.album_outlined` otherwise.
+/// Used as both placeholder and errorWidget for the CAA path so the
+/// embedded picture wins as soon as the file is decoded.
+class _EmbeddedOrGradient extends StatelessWidget {
+  const _EmbeddedOrGradient({
+    required this.artPath,
+    required this.fallbackSeed,
+  });
+
+  final String? artPath;
+  final String fallbackSeed;
+
+  @override
+  Widget build(BuildContext context) {
+    final path = artPath;
+    if (path == null) return _GradientFallback(seed: fallbackSeed);
+    return Image(
+      image: EmbeddedArtImage(path),
+      fit: BoxFit.cover,
+      gaplessPlayback: true,
+      frameBuilder: (context, child, frame, wasSync) {
+        if (frame == null) return _GradientFallback(seed: fallbackSeed);
+        return child;
+      },
+      errorBuilder: (context, error, stack) =>
           _GradientFallback(seed: fallbackSeed),
     );
   }

@@ -55,7 +55,11 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
     final snap = ref.watch(queueProvider);
     return AppShell(
       title: 'Queue',
-      currentTab: AppTab.queue,
+      // Queue is reached via the Now Playing overlay's bottom
+      // utility row, not from the bottom-nav itself; we map it to
+      // Library for the highlighted tab so the back-stack reads
+      // sensibly when the user pops out of Queue.
+      currentTab: AppTab.library,
       // Slice 7 §13 — Queue is a least-accented surface, like Library.
       useAurora: AuroraVariant.library,
       actions: [

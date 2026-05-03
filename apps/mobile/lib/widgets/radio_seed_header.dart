@@ -27,10 +27,10 @@ class RadioSeedHeader extends ConsumerWidget {
     final tokens = theme.extension<SpaceTokens>()!;
     final scale = theme.extension<TypographyScale>()!;
     return InkWell(
-      // Tap → Home (Tracks tab is the route Home / Library lives behind
-      // in the slice 5 wiring; the RadioHomeCard is rendered there).
+      // Tap → Home (the wireframe-aligned navigation surfaces
+      // RadioHomeCard inside the Home greeting block).
       onTap: () =>
-          Navigator.of(context).pushReplacementNamed(AppShell.tracksRoute),
+          Navigator.of(context).pushReplacementNamed(AppShell.homeRoute),
       child: Padding(
         padding: EdgeInsets.fromLTRB(tokens.s4, tokens.s3, tokens.s4, tokens.s1),
         child: Container(

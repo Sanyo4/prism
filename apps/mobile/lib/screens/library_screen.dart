@@ -12,8 +12,6 @@ import '../widgets/album_tile.dart';
 import '../widgets/artist_tile.dart';
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
-import 'random_tab.dart';
-import 'vibe_browse_screen.dart';
 
 /// 6-tab Library surface. Slice 4 adds **Vibe** as a sixth tab —
 /// classifier-native chips + tempo band, backed by the sidecar cache.
@@ -49,41 +47,76 @@ class LibraryScreen extends ConsumerWidget {
     // ignore: unused_result
     ref.watch(castProbeManualOnLaunchProvider);
 
+    final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
     return DefaultTabController(
-      length: 6,
+      length: 4,
       child: AppShell(
         title: 'Library',
-        currentTab: AppTab.tracks,
+        currentTab: AppTab.library,
         // Slice 7 §13 — wraps Library in the `library` Aurora variant
         // (least-accented). The Scaffold's AppBar stays Material-default;
         // only the body gains the backdrop.
         useAurora: AuroraVariant.library,
-        child: Column(
-          children: [
-            const TabBar(
-              isScrollable: true,
-              tabs: [
-                Tab(text: 'Albums'),
-                Tab(text: 'Artists'),
-                Tab(text: 'Playlists'),
-                Tab(text: 'Songs'),
-                Tab(text: 'Random'),
-                Tab(text: 'Vibe'),
-              ],
-            ),
-            const Expanded(
-              child: TabBarView(
-                children: [
-                  _AlbumsTab(),
-                  _ArtistsTab(),
-                  _PlaylistsTab(),
-                  _SongsTab(),
-                  RandomTab(),
-                  VibeBrowseScreen(),
-                ],
+        showAppBar: false,
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              // Display title — wireframe drops the Material AppBar
+              // entirely and uses an inline 32 px serif-feel header.
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  tokens.s4,
+                  tokens.s4,
+                  tokens.s4,
+                  tokens.s2,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Library',
+                        style: scale.display36.copyWith(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: -0.8,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              // Wireframe restricts Library to four tabs (Albums /
+              // Artists / Playlists / Songs). Random + Vibe are now
+              // surfaced from the Search → mood tiles + Home mood row.
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: tokens.s4),
+                child: const TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  tabs: [
+                    Tab(text: 'Albums'),
+                    Tab(text: 'Artists'),
+                    Tab(text: 'Playlists'),
+                    Tab(text: 'Songs'),
+                  ],
+                ),
+              ),
+              const Expanded(
+                child: TabBarView(
+                  children: [
+                    _AlbumsTab(),
+                    _ArtistsTab(),
+                    _PlaylistsTab(),
+                    _SongsTab(),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

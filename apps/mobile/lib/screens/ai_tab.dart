@@ -16,6 +16,10 @@ import 'new_vibe.dart';
 class AiTabScreen extends ConsumerWidget {
   const AiTabScreen({super.key});
 
+  /// Same as [AppShell.aiRoute] — re-exported here so callers don't
+  /// have to import the shell just to push the AI surface.
+  static const String routeName = '/ai';
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);

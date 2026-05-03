@@ -6,9 +6,9 @@ import 'package:prism_ui/ui.dart';
 
 import '../providers/cast_providers.dart';
 import '../providers/playback_providers.dart';
-import '../shell/app_shell.dart';
 import '../theme/palette_providers.dart';
 import '../widgets/cast_sheet.dart';
+import '../widgets/embedded_art.dart';
 import '../widgets/radio_badge.dart';
 import '../widgets/steer_chip_bar.dart';
 
@@ -51,6 +51,11 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final activeTransport = ref.watch(transportProvider);
     final isRemote = activeTransport.id != 'local';
 
+    // Now Playing is an overlay route — no AppShell, no bottom nav.
+    // Match `wireframe/music/screens/mobile-detail.jsx`'s
+    // `NowPlayingScreen`: a chevron-down close button at top-left,
+    // album label centered, more menu at top-right, then the big art
+    // and transport controls.
     return Theme(
       data: theme.copyWith(
         // Slice 7 §8 step 10: now-playing forces the AuroraVariant
@@ -60,57 +65,63 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
           palette.copyWith(variant: AuroraVariant.player),
         ),
       ),
-      child: AppShell(
-        title: 'Now Playing',
-        currentTab: AppTab.nowPlaying,
-        useAurora: AuroraVariant.player,
-        auroraAccentOverride:
-            palette.isNeutral ? null : palette.dominant,
-        // Slice 9 — cast icon. `Icons.cast_connected` when a remote
-        // transport (DLNA / Chromecast) is active; `Icons.cast`
-        // otherwise. Tap always opens the sheet.
-        actions: <Widget>[
-          IconButton(
-            tooltip: 'Cast',
-            icon: Icon(isRemote ? Icons.cast_connected : Icons.cast),
-            onPressed: () => CastSheet.show(context),
+      child: AuroraBackground(
+        variant: AuroraVariant.player,
+        accentOverride: palette.isNeutral ? null : palette.dominant,
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          body: SafeArea(
+            child: track == null
+                ? const _IdleView()
+                : Column(
+                    children: [
+                      _NowPlayingHeader(
+                        albumName: track.album,
+                        isRemote: isRemote,
+                        onClose: () => Navigator.of(context).maybePop(),
+                        onCast: () => CastSheet.show(context),
+                      ),
+                      Expanded(
+                        child: _PlayerView(
+                          track: track,
+                          position: position,
+                          duration: duration,
+                          playerState: playerState,
+                          palette: palette,
+                          scrubSeconds: _scrubSeconds,
+                          onScrubChange: (v) =>
+                              setState(() => _scrubSeconds = v),
+                          onScrubEnd: (v) {
+                            // ignore: discarded_futures
+                            ref.read(playbackServiceProvider).seek(
+                                Duration(milliseconds: (v * 1000).round()));
+                            setState(() => _scrubSeconds = null);
+                          },
+                          onPlayPause: () {
+                            final service = ref.read(playbackServiceProvider);
+                            // ignore: discarded_futures
+                            if (service.playing) {
+                              service.pause();
+                            } else {
+                              service.play();
+                            }
+                          },
+                          onPrevious: () {
+                            // ignore: discarded_futures
+                            ref
+                                .read(playbackServiceProvider)
+                                .skipToPrevious();
+                          },
+                          onNext: () {
+                            // ignore: discarded_futures
+                            ref.read(playbackServiceProvider).skipToNext();
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
           ),
-        ],
-        child: track == null
-            ? const _IdleView()
-            : _PlayerView(
-                track: track,
-                position: position,
-                duration: duration,
-                playerState: playerState,
-                palette: palette,
-                scrubSeconds: _scrubSeconds,
-                onScrubChange: (v) => setState(() => _scrubSeconds = v),
-                onScrubEnd: (v) {
-                  // ignore: discarded_futures
-                  ref
-                      .read(playbackServiceProvider)
-                      .seek(Duration(milliseconds: (v * 1000).round()));
-                  setState(() => _scrubSeconds = null);
-                },
-                onPlayPause: () {
-                  final service = ref.read(playbackServiceProvider);
-                  // ignore: discarded_futures
-                  if (service.playing) {
-                    service.pause();
-                  } else {
-                    service.play();
-                  }
-                },
-                onPrevious: () {
-                  // ignore: discarded_futures
-                  ref.read(playbackServiceProvider).skipToPrevious();
-                },
-                onNext: () {
-                  // ignore: discarded_futures
-                  ref.read(playbackServiceProvider).skipToNext();
-                },
-              ),
+        ),
       ),
     );
   }
@@ -143,8 +154,112 @@ class _IdleView extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.all(tokens.s6),
         child: const Text(
-          'Nothing is playing.\n\nTap a track on the Tracks tab to start.',
+          'Nothing is playing.\n\nTap a track to start.',
           textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+}
+
+/// Header strip for the Now Playing overlay — chevron-down close,
+/// centered "PLAYING FROM ALBUM / `name`" caption, more / cast on
+/// the right. Matches `wireframe/music/screens/mobile-detail.jsx`'s
+/// header construction.
+class _NowPlayingHeader extends StatelessWidget {
+  const _NowPlayingHeader({
+    required this.albumName,
+    required this.isRemote,
+    required this.onClose,
+    required this.onCast,
+  });
+
+  final String? albumName;
+  final bool isRemote;
+  final VoidCallback onClose;
+  final VoidCallback onCast;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(tokens.s4, tokens.s2, tokens.s4, tokens.s1),
+      child: Row(
+        children: [
+          _RoundGlassButton(
+            icon: Icons.keyboard_arrow_down,
+            tooltip: 'Close',
+            onTap: onClose,
+          ),
+          Expanded(
+            child: Column(
+              children: [
+                Text(
+                  'PLAYING FROM ALBUM',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.5,
+                    color:
+                        theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                  ),
+                ),
+                if (albumName != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    albumName!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          _RoundGlassButton(
+            icon: isRemote ? Icons.cast_connected : Icons.cast,
+            tooltip: 'Cast',
+            onTap: onCast,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoundGlassButton extends StatelessWidget {
+  const _RoundGlassButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.white.withValues(alpha: 0.55),
+        shape: const CircleBorder(),
+        elevation: 0,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: 38,
+            height: 38,
+            child: Icon(icon, size: 20, color: theme.colorScheme.onSurface),
+          ),
         ),
       ),
     );
@@ -199,7 +314,7 @@ class _PlayerView extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: tokens.s6,
-        vertical: tokens.s8,
+        vertical: tokens.s4,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -210,6 +325,23 @@ class _PlayerView extends StatelessWidget {
             alignment: AlignmentDirectional.centerStart,
             child: RadioBadge(),
           ),
+          SizedBox(height: tokens.s2),
+          // Big square album art with embedded-FLAC-art fallback. Sits
+          // inside an AspectRatio so it tracks the available width and
+          // never overflows on narrow phones / split-screen.
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 360),
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: _NowPlayingArt(
+                  trackPath: track.path,
+                  palette: palette,
+                ),
+              ),
+            ),
+          ),
+          SizedBox(height: tokens.s6),
           // Slice 7 — wrap the metadata strip in Glass(medium) so the
           // album-tinted blob underneath stays legible behind the type.
           Glass(
@@ -418,4 +550,84 @@ String _formatDuration(Duration d) {
     return '$h:${m.toString().padLeft(2, '0')}:$ss';
   }
   return '$m:$ss';
+}
+
+/// Big square album art for the now-playing surface. Reads the
+/// embedded picture from the track's audio file (FLAC PICTURE block /
+/// ID3 APIC frame / MP4 covr atom) and shows it under a soft drop
+/// shadow with rounded corners. Falls back to a palette-driven
+/// gradient + album glyph when no embedded picture is present so the
+/// surface never goes blank.
+class _NowPlayingArt extends StatelessWidget {
+  const _NowPlayingArt({
+    required this.trackPath,
+    required this.palette,
+  });
+
+  final String trackPath;
+  final AlbumPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: palette.dominant.withValues(alpha: 0.25),
+            blurRadius: 36,
+            offset: const Offset(0, 18),
+          ),
+          const BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 24,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Image(
+          image: EmbeddedArtImage(trackPath),
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          frameBuilder: (context, child, frame, wasSync) {
+            if (frame == null) return _ArtPlaceholder(palette: palette);
+            return child;
+          },
+          errorBuilder: (context, error, stack) =>
+              _ArtPlaceholder(palette: palette),
+        ),
+      ),
+    );
+  }
+}
+
+class _ArtPlaceholder extends StatelessWidget {
+  const _ArtPlaceholder({required this.palette});
+
+  final AlbumPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[
+            palette.dominant.withValues(alpha: 0.85),
+            palette.secondary.withValues(alpha: 0.85),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.album_outlined,
+          size: 96,
+          color: Colors.white.withValues(alpha: 0.85),
+        ),
+      ),
+    );
+  }
 }

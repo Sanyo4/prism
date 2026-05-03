@@ -9,6 +9,7 @@ import '../browse/album_view.dart';
 import '../providers/metadata_providers.dart';
 import '../providers/playback_providers.dart';
 import '../theme/palette_providers.dart';
+import '../widgets/embedded_art.dart';
 import '../widgets/prism_art_cache_manager.dart';
 import 'radio_context_sheet.dart';
 
@@ -294,12 +295,13 @@ class _Hero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = album.coverUrl;
+    final embeddedPath =
+        album.tracks.isEmpty ? null : album.tracks.first.path;
     if (url == null) {
-      return ColoredBox(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: const Center(
-          child: Icon(Icons.album_outlined, size: 96, color: Colors.white70),
-        ),
+      return _EmbeddedHero(
+        artPath: embeddedPath,
+        fallbackColor:
+            Theme.of(context).colorScheme.surfaceContainerHighest,
       );
     }
     return CachedNetworkImage(
@@ -307,10 +309,66 @@ class _Hero extends StatelessWidget {
       cacheKey: album.releaseMbid,
       cacheManager: PrismArtCacheManager(),
       fit: BoxFit.cover,
-      placeholder: (context, url) =>
-          const ColoredBox(color: Colors.black12),
-      errorWidget: (context, url, error) =>
-          const ColoredBox(color: Colors.black12),
+      placeholder: (context, url) => _EmbeddedHero(
+        artPath: embeddedPath,
+        fallbackColor: Colors.black12,
+      ),
+      errorWidget: (context, url, error) => _EmbeddedHero(
+        artPath: embeddedPath,
+        fallbackColor: Colors.black12,
+      ),
+    );
+  }
+}
+
+/// Renders embedded picture data from [artPath] when available, or a
+/// flat [fallbackColor] surface stamped with `Icons.album_outlined`
+/// otherwise.
+class _EmbeddedHero extends StatelessWidget {
+  const _EmbeddedHero({
+    required this.artPath,
+    required this.fallbackColor,
+  });
+
+  final String? artPath;
+  final Color fallbackColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final path = artPath;
+    if (path == null) {
+      return ColoredBox(
+        color: fallbackColor,
+        child: const Center(
+          child: Icon(Icons.album_outlined, size: 96, color: Colors.white70),
+        ),
+      );
+    }
+    return Image(
+      image: EmbeddedArtImage(path),
+      fit: BoxFit.cover,
+      gaplessPlayback: true,
+      frameBuilder: (context, child, frame, wasSync) {
+        if (frame == null) {
+          return ColoredBox(
+            color: fallbackColor,
+            child: const Center(
+              child: Icon(
+                Icons.album_outlined,
+                size: 96,
+                color: Colors.white70,
+              ),
+            ),
+          );
+        }
+        return child;
+      },
+      errorBuilder: (context, error, stack) => ColoredBox(
+        color: fallbackColor,
+        child: const Center(
+          child: Icon(Icons.album_outlined, size: 96, color: Colors.white70),
+        ),
+      ),
     );
   }
 }

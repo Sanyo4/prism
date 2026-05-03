@@ -93,6 +93,10 @@ class Glass extends StatelessWidget {
   /// (Linux desktop fallback), the gradient bumps to a higher base
   /// alpha so the surface still hides what's behind it without the
   /// blur to do that work.
+  ///
+  /// Wireframe match: the cream paper aurora interior shows white
+  /// glass with a high-saturation white border — see
+  /// `wireframe/Prism Music Player (Standalone).html` rendered.
   BoxDecoration _glassDecoration({required bool opaque, Color? tint}) {
     final tintColor = tint ?? Colors.white;
     final topAlpha = opaque ? 0.92 : 0.45;

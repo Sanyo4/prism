@@ -191,37 +191,44 @@ const Color _kMint = Color(0xFFA0E8C4);
 const Color _kAmber = Color(0xFFFFC878);
 const Color _kLilac = Color(0xFFC0A0FF);
 
-// Soft off-white "paper" tone used as the inner base gradient
-// across all five variants. Keeps the surface readable.
+// Y2K Aero "frosted music" backdrop — the wireframe interior is
+// **light** cream/paper with pastel pink / lilac / mint blobs (see
+// `wireframe/Prism Music Player (Standalone).html` rendered output).
+// The page-wrapper around the mockups is dark navy, but that is just
+// the staging surrounds — the actual app is built on a warm paper
+// base. Reverting to soft cream keeps the wireframe's "made of light
+// and glass" vocabulary intact.
 const Color _kPaper = Color(0xFFFBF7F2);
 
 const Map<AuroraVariant, _VariantSpec> _kVariantSpecs = <AuroraVariant,
     _VariantSpec>{
   AuroraVariant.home: _VariantSpec(
-    primaryAccent: _kBlue,
+    primaryAccent: _kLilac,
     baseStartColor: _kPaper,
-    baseEndColor: Color(0xFFEAF2FF),
+    // Warm paper tones at the edge — cream → soft lilac → soft pink
+    // is the aurora the wireframe paints under the home greeting.
+    baseEndColor: Color(0xFFEEEAFA),
     gradientCenter: Alignment(-0.4, -0.6),
     gradientRadius: 1.4,
     blobs: <_BlobSpec>[
       _BlobSpec(
-        size: 360,
-        color: _kBlue,
-        alpha: 0.40,
+        size: 380,
+        color: _kLilac,
+        alpha: 0.55,
         left: -80,
         top: -120,
       ),
       _BlobSpec(
-        size: 320,
+        size: 340,
         color: _kPink,
-        alpha: 0.30,
+        alpha: 0.45,
         right: -60,
         top: 80,
       ),
       _BlobSpec(
-        size: 280,
-        color: _kMint,
-        alpha: 0.28,
+        size: 300,
+        color: _kBlue,
+        alpha: 0.30,
         left: 40,
         bottom: -100,
       ),
@@ -235,17 +242,17 @@ const Map<AuroraVariant, _VariantSpec> _kVariantSpecs = <AuroraVariant,
     gradientRadius: 1.5,
     blobs: <_BlobSpec>[
       _BlobSpec(
-        size: 420,
+        size: 440,
         color: _kPink,
-        alpha: 0.45,
+        alpha: 0.55,
         usesAccent: true,
         left: -100,
         top: -160,
       ),
       _BlobSpec(
-        size: 320,
+        size: 340,
         color: _kAmber,
-        alpha: 0.30,
+        alpha: 0.40,
         right: -80,
         bottom: -100,
       ),
@@ -259,24 +266,24 @@ const Map<AuroraVariant, _VariantSpec> _kVariantSpecs = <AuroraVariant,
     gradientRadius: 1.6,
     blobs: <_BlobSpec>[
       _BlobSpec(
-        size: 480,
+        size: 500,
         color: _kBlue,
-        alpha: 0.50,
+        alpha: 0.55,
         usesAccent: true,
         left: -120,
         top: -180,
       ),
       _BlobSpec(
-        size: 360,
+        size: 380,
         color: _kLilac,
-        alpha: 0.35,
+        alpha: 0.45,
         right: -100,
         top: 60,
       ),
       _BlobSpec(
-        size: 300,
+        size: 320,
         color: _kPink,
-        alpha: 0.28,
+        alpha: 0.35,
         left: 40,
         bottom: -120,
       ),
@@ -290,16 +297,16 @@ const Map<AuroraVariant, _VariantSpec> _kVariantSpecs = <AuroraVariant,
     gradientRadius: 1.4,
     blobs: <_BlobSpec>[
       _BlobSpec(
-        size: 320,
+        size: 340,
         color: _kMint,
-        alpha: 0.38,
+        alpha: 0.45,
         left: -60,
         top: -80,
       ),
       _BlobSpec(
-        size: 260,
+        size: 280,
         color: _kBlue,
-        alpha: 0.22,
+        alpha: 0.30,
         right: -40,
         bottom: 40,
       ),
@@ -313,23 +320,23 @@ const Map<AuroraVariant, _VariantSpec> _kVariantSpecs = <AuroraVariant,
     gradientRadius: 1.5,
     blobs: <_BlobSpec>[
       _BlobSpec(
-        size: 400,
+        size: 420,
         color: _kLilac,
-        alpha: 0.42,
+        alpha: 0.50,
         left: -80,
         top: -120,
       ),
       _BlobSpec(
-        size: 320,
+        size: 340,
         color: _kPink,
-        alpha: 0.30,
+        alpha: 0.40,
         right: -80,
         top: 100,
       ),
       _BlobSpec(
-        size: 280,
+        size: 300,
         color: _kAmber,
-        alpha: 0.24,
+        alpha: 0.30,
         left: 60,
         bottom: -80,
       ),

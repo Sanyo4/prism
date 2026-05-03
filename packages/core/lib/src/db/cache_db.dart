@@ -61,7 +61,16 @@ class CacheDb {
         onConfigure: (db) async {
           // WAL lets the FFI reader stay lock-free while writes run.
           // Mandatory per slice-4 §10 risk 12.
-          await db.execute('PRAGMA journal_mode = WAL');
+          //
+          // `PRAGMA journal_mode = WAL` returns the new mode as a row,
+          // and Android's SQLiteDatabase rejects `execute()` for any
+          // statement that returns data with:
+          //   "Queries can be performed using SQLiteDatabase query or
+          //    rawQuery methods only."
+          // `rawQuery` is the documented sqflite path for PRAGMAs that
+          // return values. `foreign_keys = ON` returns nothing so
+          // `execute` is fine for that one.
+          await db.rawQuery('PRAGMA journal_mode = WAL');
           await db.execute('PRAGMA foreign_keys = ON');
         },
         onCreate: (db, version) async {

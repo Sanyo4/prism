@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Prism — Music Player</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #0f1420; overflow: hidden; }
+  body {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at 20% 10%, #2a3a6a 0%, transparent 50%),
+      radial-gradient(circle at 80% 90%, #4a2a6a 0%, transparent 55%),
+      linear-gradient(160deg, #0f1420 0%, #181830 100%);
+    color: #eef;
+  }
+  * { box-sizing: border-box; }
+  button { font-family: inherit; }
+  input, textarea { font-family: inherit; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%,100% { opacity: .7; } 50% { opacity: 1; } }
+  /* hide scrollbar on horizontal scrollers */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(120,140,180,0.25); border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  .stage {
+    min-height: 100vh;
+    padding: 40px 60px 80px;
+    overflow-x: auto;
+  }
+  .stage-title {
+    font-family: 'Instrument Serif', serif; font-style: italic;
+    color: #eef; font-size: 38px; margin: 0 0 6px; letter-spacing: -0.5px;
+  }
+  .stage-sub {
+    color: rgba(230,235,250,0.6); font-size: 13px; margin: 0 0 38px;
+    max-width: 640px; line-height: 1.5;
+  }
+  .frames-row {
+    display: flex; gap: 48px; align-items: flex-start;
+    flex-wrap: nowrap; min-width: max-content; padding-bottom: 30px;
+  }
+  .frame-label {
+    color: rgba(230,235,250,0.5); font-size: 11px; font-weight: 600;
+    letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 14px;
+  }
+  .section-divider {
+    height: 1px; background: linear-gradient(90deg, transparent, rgba(230,235,250,0.15), transparent);
+    margin: 60px 0 40px; max-width: 900px;
+  }
+  .tweaks-panel {
+    position: fixed; top: 20px; right: 20px; z-index: 999;
+    background: rgba(20,25,40,0.85); backdrop-filter: blur(30px) saturate(180%);
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 16px;
+    padding: 16px; width: 260px;
+    color: #eef; font-size: 12px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+  }
+  .tweaks-panel h3 {
+    margin: 0 0 12px; font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+    text-transform: uppercase; color: rgba(230,235,250,0.6);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .tweak-row { margin-bottom: 12px; }
+  .tweak-label { font-size: 11px; color: rgba(230,235,250,0.6); margin-bottom: 4px; }
+  .tweak-options { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tweak-opt {
+    padding: 5px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.05); color: #eef; cursor: pointer; font-size: 11px;
+  }
+  .tweak-opt.active { background: rgba(120,160,255,0.3); border-color: rgba(120,160,255,0.6); }
+  .swatch { width: 24px; height: 24px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; }
+  .swatch.active { border-color: #fff; }
+</style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="data/library.jsx"></script>
+  <script type="text/babel" src="ui/primitives.jsx"></script>
+  <script type="text/babel" src="screens/mobile-shell.jsx"></script>
+  <script type="text/babel" src="screens/mobile-browse.jsx"></script>
+  <script type="text/babel" src="screens/mobile-detail.jsx"></script>
+  <script type="text/babel" src="screens/desktop.jsx"></script>
+
+  <script type="text/babel">
+    // ───────────────────────────────────────────────────────────
+    // Pixel 9 Pro Fold custom frame — outer (small) and inner (tablet)
+    // ───────────────────────────────────────────────────────────
+    function PixelFoldFrame({ width, height, children, showHinge = false }) {
+      return (
+        <div style={{
+          width, height, borderRadius: 34, position: 'relative',
+          background: '#1a1a22',
+          padding: 6,
+          boxShadow: '0 40px 90px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)',
+        }}>
+          <div style={{
+            width: '100%', height: '100%', borderRadius: 28, overflow: 'hidden',
+            position: 'relative', background: '#000',
+          }}>
+            {children}
+          </div>
+          {showHinge && (
+            <div style={{
+              position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1,
+              background: 'linear-gradient(180deg, transparent, rgba(255,255,255,0.06), transparent)',
+              pointerEvents: 'none',
+            }} />
+          )}
+        </div>
+      );
+    }
+
+    // ───────────────────────────────────────────────────────────
+    // Linux window chrome (GNOME-style)
+    // ───────────────────────────────────────────────────────────
+    function LinuxWindow({ width, height, children }) {
+      return (
+        <div style={{
+          width, height, borderRadius: 14, overflow: 'hidden', background: '#0d1220',
+          boxShadow: '0 40px 90px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.08)',
+          position: 'relative',
+        }}>
+          {children}
+        </div>
+      );
+    }
+
+    // ───────────────────────────────────────────────────────────
+    // Main player app (mobile) — contains all screens + state
+    // ───────────────────────────────────────────────────────────
+    function MobileApp({ screenSize, accent }) {
+      const [state, setState] = React.useState({
+        trackId: 't1', progress: 87, isPlaying: true,
+      });
+      const [nav, setNav] = React.useState('home');
+      const [overlay, setOverlay] = React.useState(null); // null | 'player' | 'ai'
+      const [detail, setDetail] = React.useState(null); // {type:'album'|'artist', id}
+
+      // advance time while playing
+      React.useEffect(() => {
+        if (!state.isPlaying) return;
+        const t = setInterval(() => {
+          setState(s => {
+            const track = getTrack(s.trackId);
+            if (s.progress >= track.duration) return { ...s, progress: 0 };
+            return { ...s, progress: s.progress + 1 };
+          });
+        }, 1000);
+        return () => clearInterval(t);
+      }, [state.isPlaying, state.trackId]);
+
+      const next = () => setState(s => {
+        const ids = LIBRARY.tracks.map(t => t.id);
+        const i = ids.indexOf(s.trackId);
+        return { ...s, trackId: ids[(i + 1) % ids.length], progress: 0 };
+      });
+      const prev = () => setState(s => {
+        const ids = LIBRARY.tracks.map(t => t.id);
+        const i = ids.indexOf(s.trackId);
+        return { ...s, trackId: ids[(i - 1 + ids.length) % ids.length], progress: 0 };
+      });
+
+      const variant = overlay === 'player' ? 'player' : overlay === 'ai' ? 'ai' : detail?.type === 'album' ? 'album' : nav === 'library' ? 'library' : 'home';
+
+      return (
+        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+          <AuroraBg variant={variant} accent={accent}>
+            <PhoneStatusBar />
+
+            {/* Main scrollable body */}
+            <div style={{ position: 'absolute', top: 40, left: 0, right: 0, bottom: 0, overflow: 'hidden' }}>
+              {detail?.type === 'album' ? (
+                <AlbumScreen albumId={detail.id} onBack={() => setDetail(null)} onPlayTrack={(id) => setState(s => ({ ...s, trackId: id, progress: 0, isPlaying: true }))} accent={accent} />
+              ) : detail?.type === 'artist' ? (
+                <ArtistScreen artistId={detail.id} onBack={() => setDetail(null)} onOpenAlbum={(id) => setDetail({ type: 'album', id })} accent={accent} />
+              ) : nav === 'home' ? (
+                <HomeScreen onOpenAlbum={(id) => setDetail({ type: 'album', id })} onOpenArtist={(id) => setDetail({ type: 'artist', id })} onOpenAI={() => setOverlay('ai')} />
+              ) : nav === 'library' ? (
+                <LibraryScreen onOpenAlbum={(id) => setDetail({ type: 'album', id })} onOpenArtist={(id) => setDetail({ type: 'artist', id })} />
+              ) : nav === 'search' ? (
+                <SearchScreen />
+              ) : nav === 'ai' ? (
+                <div style={{ padding: '20px' }}>
+                  <button onClick={() => setOverlay('ai')} style={{
+                    width: '100%', border: 'none', padding: 16, borderRadius: 16,
+                    background: 'linear-gradient(135deg, #b8c8ff, #d8b8ff)',
+                    color: '#fff', fontSize: 16, fontWeight: 600, cursor: 'pointer',
+                  }}>Open Playlist Composer</button>
+                </div>
+              ) : null}
+            </div>
+
+            <MiniPlayer state={state} onExpand={() => setOverlay('player')} onTogglePlay={() => setState(s => ({ ...s, isPlaying: !s.isPlaying }))} onNext={next} accent={accent} />
+            <BottomNav current={nav} onNav={(n) => { setNav(n); setDetail(null); if (n === 'ai') setOverlay('ai'); }} accent={accent} />
+
+            {overlay === 'player' && (
+              <NowPlayingScreen
+                state={state}
+                onClose={() => setOverlay(null)}
+                onTogglePlay={() => setState(s => ({ ...s, isPlaying: !s.isPlaying }))}
+                onNext={next} onPrev={prev}
+                onSeek={(v) => setState(s => ({ ...s, progress: v }))}
+                accent={accent}
+              />
+            )}
+            {overlay === 'ai' && (
+              <AIPlaylistScreen onClose={() => setOverlay(null)} accent={accent} />
+            )}
+          </AuroraBg>
+        </div>
+      );
+    }
+
+    // ───────────────────────────────────────────────────────────
+    // Linux Desktop App wrapper (holds its own state too)
+    // ───────────────────────────────────────────────────────────
+    function LinuxApp({ accent }) {
+      const [state, setState] = React.useState({
+        trackId: 't1', progress: 87, isPlaying: true,
+      });
+      React.useEffect(() => {
+        if (!state.isPlaying) return;
+        const t = setInterval(() => {
+          setState(s => {
+            const track = getTrack(s.trackId);
+            if (s.progress >= track.duration) return { ...s, progress: 0 };
+            return { ...s, progress: s.progress + 1 };
+          });
+        }, 1000);
+        return () => clearInterval(t);
+      }, [state.isPlaying, state.trackId]);
+
+      const next = () => setState(s => {
+        const ids = LIBRARY.tracks.map(t => t.id);
+        const i = ids.indexOf(s.trackId);
+        return { ...s, trackId: ids[(i + 1) % ids.length], progress: 0 };
+      });
+      const prev = () => setState(s => {
+        const ids = LIBRARY.tracks.map(t => t.id);
+        const i = ids.indexOf(s.trackId);
+        return { ...s, trackId: ids[(i - 1 + ids.length) % ids.length], progress: 0 };
+      });
+
+      return (
+        <DesktopApp
+          state={state}
+          onTogglePlay={() => setState(s => ({ ...s, isPlaying: !s.isPlaying }))}
+          onNext={next} onPrev={prev}
+          onSeek={(v) => setState(s => ({ ...s, progress: v }))}
+          accent={accent}
+        />
+      );
+    }
+
+    // ───────────────────────────────────────────────────────────
+    // Tweaks panel
+    // ───────────────────────────────────────────────────────────
+    const DEFAULTS = /*EDITMODE-BEGIN*/{
+      "accent": "peach",
+      "density": "comfortable",
+      "blurIntensity": "medium"
+    }/*EDITMODE-END*/;
+
+    const ACCENTS = {
+      sky:    { value: '#6ba8ff', name: 'Sky' },
+      lilac:  { value: '#a88bff', name: 'Lilac' },
+      peach:  { value: '#ff9c8a', name: 'Peach' },
+      mint:   { value: '#5ac8b0', name: 'Mint' },
+      aero:   { value: '#4fb8f0', name: 'Aero' },
+    };
+
+    function TweaksPanel({ tweaks, setTweaks, editing }) {
+      if (!editing) return null;
+      const set = (k, v) => {
+        setTweaks(t => ({ ...t, [k]: v }));
+        window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { [k]: v } }, '*');
+      };
+      return (
+        <div className="tweaks-panel">
+          <h3>Tweaks</h3>
+          <div className="tweak-row">
+            <div className="tweak-label">Accent color</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {Object.entries(ACCENTS).map(([k, v]) => (
+                <div key={k} onClick={() => set('accent', k)}
+                  className={`swatch ${tweaks.accent === k ? 'active' : ''}`}
+                  style={{ background: v.value }} />
+              ))}
+            </div>
+          </div>
+          <div className="tweak-row">
+            <div className="tweak-label">Density</div>
+            <div className="tweak-options">
+              {['compact','comfortable','spacious'].map(d => (
+                <div key={d} onClick={() => set('density', d)}
+                  className={`tweak-opt ${tweaks.density === d ? 'active' : ''}`}>{d}</div>
+              ))}
+            </div>
+          </div>
+          <div className="tweak-row">
+            <div className="tweak-label">Blur intensity</div>
+            <div className="tweak-options">
+              {['light','medium','heavy'].map(b => (
+                <div key={b} onClick={() => set('blurIntensity', b)}
+                  className={`tweak-opt ${tweaks.blurIntensity === b ? 'active' : ''}`}>{b}</div>
+              ))}
+            </div>
+          </div>
+          <div style={{ fontSize: 10, color: 'rgba(230,235,250,0.4)', marginTop: 14, lineHeight: 1.4 }}>
+            Toggle Tweaks again to hide this panel. Changes persist.
+          </div>
+        </div>
+      );
+    }
+
+    // ───────────────────────────────────────────────────────────
+    // Stage
+    // ───────────────────────────────────────────────────────────
+    function App() {
+      const [tweaks, setTweaks] = React.useState(DEFAULTS);
+      const [editing, setEditing] = React.useState(false);
+
+      React.useEffect(() => {
+        const onMsg = (e) => {
+          if (e.data?.type === '__activate_edit_mode') setEditing(true);
+          else if (e.data?.type === '__deactivate_edit_mode') setEditing(false);
+        };
+        window.addEventListener('message', onMsg);
+        window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+        return () => window.removeEventListener('message', onMsg);
+      }, []);
+
+      const accent = ACCENTS[tweaks.accent]?.value || '#6ba8ff';
+
+      // Pixel 9 Pro Fold: outer 6.3" ~ 412×919, inner 8" ~ 768×960 (scaled-down for display)
+      return (
+        <div className="stage">
+          <div style={{ maxWidth: 900, marginBottom: 30 }}>
+            <div style={{ fontSize: 11, color: 'rgba(230,235,250,0.5)', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>✦ Prism — Frosted music</div>
+            <h1 className="stage-title">A music player made of light and glass.</h1>
+            <p className="stage-sub">
+              Glassmorphic player built around Y2K Aero vocabulary — soft aurora backdrops, liquid-chrome transport,
+              high-transparency panes. Responsive from Pixel 9 Pro Fold's outer display (412w) to the unfolded
+              inner tablet (768w) to Linux desktop. Try the transport controls, tap the mini player to expand,
+              open the ✦ Compose tab for the one-tap AI playlist generator. Use Tweaks (top-right toggle) for accent and density.
+            </p>
+          </div>
+
+          <TweaksPanel tweaks={tweaks} setTweaks={setTweaks} editing={editing} />
+
+          {/* Mobile frames row */}
+          <div className="frames-row" data-screen-label="Mobile flow">
+            <div>
+              <div className="frame-label">Pixel 9 Pro Fold · Outer · 412×919</div>
+              <PixelFoldFrame width={412} height={919}>
+                <MobileApp screenSize="outer" accent={accent} />
+              </PixelFoldFrame>
+            </div>
+            <div>
+              <div className="frame-label">Pixel 9 Pro Fold · Inner (unfolded) · 768×720</div>
+              <PixelFoldFrame width={768} height={720}>
+                <MobileApp screenSize="inner" accent={accent} />
+              </PixelFoldFrame>
+            </div>
+          </div>
+
+          <div className="section-divider" />
+
+          <div style={{ marginBottom: 30 }}>
+            <div className="frame-label" style={{ fontSize: 14, color: 'rgba(230,235,250,0.7)' }}>Linux desktop</div>
+            <p style={{ color: 'rgba(230,235,250,0.5)', fontSize: 13, margin: '6px 0 0', maxWidth: 640 }}>
+              GNOME-style header, glass sidebar, persistent transport bar. Shares state with the mobile app so both advance together.
+            </p>
+          </div>
+
+          <div className="frames-row" data-screen-label="Linux desktop">
+            <div>
+              <LinuxWindow width={1200} height={760}>
+                <LinuxApp accent={accent} />
+              </LinuxWindow>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
