@@ -75,6 +75,44 @@ final class ArtistSeed extends SeedRef {
   int get hashCode => Object.hash(artist, label);
 }
 
+/// Seed = a synthetic cluster of tracks (slice 10 §2.3). The session's
+/// `seedEmbedding` is the L2-normalised mean of the cluster's per-track
+/// embeddings. `trackIds` carries the constituent ids so callers can
+/// re-render the cluster's tracks (e.g. an end-of-playlist preview row).
+/// `steeringHint` is an optional free-form label inferred from the
+/// originating prompt — surfaced verbatim in the badge label.
+final class ClusterSeed extends SeedRef {
+  final List<int> trackIds;
+  final String? steeringHint;
+  @override
+  final String label;
+  const ClusterSeed({
+    required this.trackIds,
+    required this.label,
+    this.steeringHint,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ClusterSeed &&
+          other.label == label &&
+          other.steeringHint == steeringHint &&
+          _listEquals(other.trackIds, trackIds));
+
+  @override
+  int get hashCode =>
+      Object.hash(label, steeringHint, Object.hashAll(trackIds));
+}
+
+bool _listEquals(List<int> a, List<int> b) {
+  if (a.length != b.length) return a.length == b.length;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
 /// Snapshot of a running radio session. Immutable: every state
 /// transition (`tick`, `withChipToggled`, `copyAfterPick`) returns a
 /// new instance so providers can drive `==`-based rebuilds without

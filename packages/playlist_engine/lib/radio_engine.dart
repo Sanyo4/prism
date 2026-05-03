@@ -224,6 +224,37 @@ class RadioEngine {
     }
   }
 
+  /// Element-wise average of [vectors], then L2-normalised. Returns
+  /// `null` on empty input. Used by `RadioSessionNotifier.startFromCluster`
+  /// (slice 10) to seed a session from a list of tracks treated as a
+  /// synthetic cluster — matches the format `meanEmbeddingForAlbum`
+  /// already returns.
+  ///
+  /// All input vectors must be 1280-dim; mismatched lengths throw
+  /// `ArgumentError`.
+  static Float32List? averageEmbeddings(List<Float32List> vectors) {
+    if (vectors.isEmpty) return null;
+    const dim = 1280;
+    for (final v in vectors) {
+      if (v.length != dim) {
+        throw ArgumentError(
+          'averageEmbeddings: expected length $dim, got ${v.length}',
+        );
+      }
+    }
+    final acc = Float32List(dim);
+    for (final v in vectors) {
+      for (var i = 0; i < dim; i++) {
+        acc[i] += v[i];
+      }
+    }
+    final n = vectors.length;
+    for (var i = 0; i < dim; i++) {
+      acc[i] /= n;
+    }
+    return _l2Normalize(acc);
+  }
+
   /// L2-normalize a 1280-dim embedding in place into a fresh
   /// `Float32List`. Zero vectors are returned untouched (avoids
   /// division-by-zero — extremely unlikely in practice).

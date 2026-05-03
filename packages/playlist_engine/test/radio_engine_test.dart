@@ -316,4 +316,77 @@ void main() {
       expect(next.chips.containsKey(SteerChip.faster), isFalse);
     });
   });
+
+  group('RadioEngine.averageEmbeddings', () {
+    test('returns null for empty list', () {
+      expect(RadioEngine.averageEmbeddings(const []), isNull);
+    });
+
+    test('single vector echoes its L2-normalised form', () {
+      final v = Float32List.fromList(List<double>.filled(1280, 0.0));
+      v[0] = 3.0;
+      v[1] = 4.0; // L2 norm = 5
+      final out = RadioEngine.averageEmbeddings([v]);
+      expect(out, isNotNull);
+      expect(out!.length, 1280);
+      expect(out[0], closeTo(0.6, 1e-6));
+      expect(out[1], closeTo(0.8, 1e-6));
+      var sumSq = 0.0;
+      for (final x in out) {
+        sumSq += x * x;
+      }
+      expect(sumSq, closeTo(1.0, 1e-3));
+    });
+
+    test('two-vector mean is element-wise then L2-normalised', () {
+      final a = Float32List(1280);
+      a[0] = 2.0;
+      final b = Float32List(1280);
+      b[0] = 4.0;
+      final out = RadioEngine.averageEmbeddings([a, b]);
+      // Mean[0] = 3.0; norm = 3 → out[0] = 1.0.
+      expect(out, isNotNull);
+      expect(out![0], closeTo(1.0, 1e-6));
+      for (var i = 1; i < 1280; i++) {
+        expect(out[i], closeTo(0.0, 1e-6));
+      }
+    });
+
+    test('zero-mean vector returns the zero vector untouched', () {
+      final z = Float32List(1280);
+      final out = RadioEngine.averageEmbeddings([z, z]);
+      expect(out, isNotNull);
+      for (final x in out!) {
+        expect(x, 0.0);
+      }
+    });
+
+    test('rejects vectors of unexpected length', () {
+      final wrong = Float32List(1024);
+      expect(
+        () => RadioEngine.averageEmbeddings([wrong]),
+        throwsArgumentError,
+      );
+    });
+  });
+
+  group('ClusterSeed', () {
+    test('label flows through to SeedRef.label', () {
+      const seed = ClusterSeed(
+        trackIds: [1, 2, 3],
+        label: 'Rainy Sunday jazz',
+        steeringHint: 'rainy_sunday',
+      );
+      expect((seed as SeedRef).label, 'Rainy Sunday jazz');
+      expect(seed.steeringHint, 'rainy_sunday');
+    });
+
+    test('equality compares label, hint, and track id list', () {
+      const a = ClusterSeed(trackIds: [1, 2], label: 'x');
+      const b = ClusterSeed(trackIds: [1, 2], label: 'x');
+      const c = ClusterSeed(trackIds: [1, 3], label: 'x');
+      expect(a, b);
+      expect(a, isNot(c));
+    });
+  });
 }
