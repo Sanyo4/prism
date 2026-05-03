@@ -130,47 +130,62 @@ class MoodQuery {
     return confidence * (1 + play) * recency;
   }
 
+  /// Public access to the per-chip composite SQL fragment used to
+  /// compute the chip's confidence score. Slice 10 §5 invariant: the
+  /// returned strings are byte-identical to the slice-4 SQL — `_querySpec`
+  /// reads from this method, and `VibeShuffleQuery` reuses the same
+  /// fragments to keep the chip→column mapping the single source of truth.
+  static String chipExpression(MoodChip chip) {
+    switch (chip) {
+      case MoodChip.happy:
+        return 'mood_happy';
+      case MoodChip.sad:
+        return 'mood_sad';
+      case MoodChip.chill:
+        return 'mood_relaxed * CASE WHEN bpm < 110 THEN 1.0 ELSE 0.5 END';
+      case MoodChip.energetic:
+        return 'MAX(COALESCE(mood_party, 0.0), COALESCE(danceability, 0.0)) '
+            ' * CASE WHEN bpm > 110 THEN 1.0 ELSE 0.5 END';
+      case MoodChip.focus:
+        return 'voice_instrumental '
+            ' * (1.0 - COALESCE(mood_aggressive, 0.0)) '
+            ' * (1.0 - COALESCE(mood_party, 0.0))';
+    }
+  }
+
   /// Deterministic spec for each chip — extracted so the SQL can be
   /// inspected and the formulas tested in isolation.
   static _ChipSpec _querySpec(MoodChip chip) {
+    final expr = chipExpression(chip);
     switch (chip) {
       case MoodChip.happy:
         return _ChipSpec(
-          confidenceExpr: 'mood_happy',
+          confidenceExpr: expr,
           filter: 'mood_happy IS NOT NULL',
           params: const [],
         );
       case MoodChip.sad:
         return _ChipSpec(
-          confidenceExpr: 'mood_sad',
+          confidenceExpr: expr,
           filter: 'mood_sad IS NOT NULL',
           params: const [],
         );
       case MoodChip.chill:
-        // chill = mood_relaxed * (bpm < 110 ? 1 : 0.5)
         return _ChipSpec(
-          confidenceExpr:
-              'mood_relaxed * CASE WHEN bpm < 110 THEN 1.0 ELSE 0.5 END',
+          confidenceExpr: expr,
           filter: 'mood_relaxed IS NOT NULL',
           params: const [],
         );
       case MoodChip.energetic:
-        // energetic = max(mood_party, danceability) * (bpm > 110 ? 1 : 0.5)
         return _ChipSpec(
-          confidenceExpr:
-              'MAX(COALESCE(mood_party, 0.0), COALESCE(danceability, 0.0)) '
-              ' * CASE WHEN bpm > 110 THEN 1.0 ELSE 0.5 END',
+          confidenceExpr: expr,
           filter:
               '(mood_party IS NOT NULL OR danceability IS NOT NULL)',
           params: const [],
         );
       case MoodChip.focus:
-        // focus = voice_instrumental * (1 - mood_aggressive) * (1 - mood_party)
         return _ChipSpec(
-          confidenceExpr:
-              'voice_instrumental '
-              ' * (1.0 - COALESCE(mood_aggressive, 0.0)) '
-              ' * (1.0 - COALESCE(mood_party, 0.0))',
+          confidenceExpr: expr,
           filter: 'voice_instrumental IS NOT NULL',
           params: const [],
         );

@@ -192,5 +192,40 @@ void main() {
       expect(results, hasLength(1));
       expect(results.first.path, '/r.flac');
     });
+
+    group('MoodQuery.chipExpression', () {
+      test('happy returns mood_happy', () {
+        expect(MoodQuery.chipExpression(MoodChip.happy), 'mood_happy');
+      });
+
+      test('sad returns mood_sad', () {
+        expect(MoodQuery.chipExpression(MoodChip.sad), 'mood_sad');
+      });
+
+      test('chill applies bpm < 110 weighting', () {
+        expect(
+          MoodQuery.chipExpression(MoodChip.chill),
+          'mood_relaxed * CASE WHEN bpm < 110 THEN 1.0 ELSE 0.5 END',
+        );
+      });
+
+      test('energetic uses MAX(party, danceability) and bpm > 110 weighting',
+          () {
+        expect(
+          MoodQuery.chipExpression(MoodChip.energetic),
+          'MAX(COALESCE(mood_party, 0.0), COALESCE(danceability, 0.0)) '
+          ' * CASE WHEN bpm > 110 THEN 1.0 ELSE 0.5 END',
+        );
+      });
+
+      test('focus penalises aggressive + party', () {
+        expect(
+          MoodQuery.chipExpression(MoodChip.focus),
+          'voice_instrumental '
+          ' * (1.0 - COALESCE(mood_aggressive, 0.0)) '
+          ' * (1.0 - COALESCE(mood_party, 0.0))',
+        );
+      });
+    });
   });
 }
