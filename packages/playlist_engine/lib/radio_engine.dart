@@ -224,6 +224,23 @@ class RadioEngine {
     }
   }
 
+  /// L2-normalize a 1280-dim embedding in place into a fresh
+  /// `Float32List`. Zero vectors are returned untouched (avoids
+  /// division-by-zero — extremely unlikely in practice).
+  static Float32List _l2Normalize(Float32List src) {
+    var sum = 0.0;
+    for (var i = 0; i < src.length; i++) {
+      sum += src[i] * src[i];
+    }
+    final norm = math.sqrt(sum);
+    if (norm == 0.0) return Float32List.fromList(src);
+    final out = Float32List(src.length);
+    for (var i = 0; i < src.length; i++) {
+      out[i] = src[i] / norm;
+    }
+    return out;
+  }
+
   /// Element-wise average of [vectors], then L2-normalised. Returns
   /// `null` on empty input. Used by `RadioSessionNotifier.startFromCluster`
   /// (slice 10) to seed a session from a list of tracks treated as a
@@ -253,23 +270,6 @@ class RadioEngine {
       acc[i] /= n;
     }
     return _l2Normalize(acc);
-  }
-
-  /// L2-normalize a 1280-dim embedding in place into a fresh
-  /// `Float32List`. Zero vectors are returned untouched (avoids
-  /// division-by-zero — extremely unlikely in practice).
-  static Float32List _l2Normalize(Float32List src) {
-    var sum = 0.0;
-    for (var i = 0; i < src.length; i++) {
-      sum += src[i] * src[i];
-    }
-    final norm = math.sqrt(sum);
-    if (norm == 0.0) return Float32List.fromList(src);
-    final out = Float32List(src.length);
-    for (var i = 0; i < src.length; i++) {
-      out[i] = src[i] / norm;
-    }
-    return out;
   }
 }
 
