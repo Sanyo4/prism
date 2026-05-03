@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'screens/ai_tab.dart';
 import 'screens/home_screen.dart';
 import 'screens/library_screen.dart';
+import 'screens/new_vibe.dart';
 import 'screens/now_playing_screen.dart';
 import 'screens/queue_screen.dart';
 
@@ -43,6 +45,9 @@ class PrismApp extends StatelessWidget {
         homeRoute: (_) => const HomeScreen(),
         '/now-playing': (_) => const NowPlayingScreen(),
         '/queue': (_) => const QueueScreen(),
+        // Slice 6 — AI tab landing + the New Vibe sheet.
+        '/ai': (_) => const AiTabScreen(),
+        NewVibeSheet.routeName: (_) => const NewVibeSheet(),
       },
     );
   }

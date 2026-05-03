@@ -19,6 +19,7 @@ dependencies:
 
   # Prism workspace packages
   prism_core: any
+  prism_llm_desktop: any
   prism_metadata: any
   prism_playback: any
   prism_playlist_engine: any

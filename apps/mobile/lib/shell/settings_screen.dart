@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'settings_library.dart';
+import 'settings_llm_section.dart';
 import 'settings_online_metadata.dart';
 import 'settings_sections.dart';
 
@@ -24,6 +25,11 @@ class SettingsScreen extends StatelessWidget {
         children: const [
           SettingsOnlineMetadataSection(),
           SettingsLibrarySection(),
+          // Slice 6 — LLM section appended below the slice-4 Library
+          // row. Order kept stable so the slice-1 widget test (which
+          // asserts visible section headers via `scrollUntilVisible`)
+          // still resolves "Playback" past this section.
+          SettingsLlmSection(),
           SettingsSectionHeader(title: 'Playback'),
           SettingsSectionPlaceholder(
             subtitle:

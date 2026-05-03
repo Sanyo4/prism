@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile/providers/llm_providers.dart';
+import 'package:prism_llm_desktop/llm_desktop.dart';
 
 import 'package:mobile/app.dart';
 
@@ -17,8 +19,23 @@ void main() {
   // need a `path_provider` mock).
   testWidgets('Gear icon reaches Settings from every top-level tab',
       (tester) async {
+    // Slice 6's `SettingsLlmSection` watches `ollamaHealthProvider`,
+    // which polls `localhost:11434` over HTTP. In a widget test
+    // there's no network and the framework refuses real HTTP, so we
+    // override the stream with a synthetic "down" snapshot — we're
+    // testing the gear-icon journey, not Ollama liveness.
     await tester.pumpWidget(
-      const ProviderScope(child: PrismApp()),
+      ProviderScope(
+        overrides: [
+          ollamaHealthProvider.overrideWith((ref) async* {
+            yield const OllamaHealth(
+              status: OllamaHealthStatus.down,
+              detail: 'overridden in widget test',
+            );
+          }),
+        ],
+        child: const PrismApp(),
+      ),
     );
     // Don't pumpAndSettle: the LibraryScreen's tabs spin up async
     // providers that we'd otherwise have to mock. The first frame
@@ -65,11 +82,18 @@ void main() {
       findsOneWidget,
     );
     // The Playback section header is below the fold in the default
-    // 800x600 test viewport (slice 4 added Library + Cache stats rows
-    // ahead of it). Scroll the Settings list to bring it into view
-    // before asserting; the row exists in the tree, the assertion is
-    // about reachable layout.
-    await tester.scrollUntilVisible(find.text('Playback'), 200);
+    // 800x600 test viewport (slices 4+6 added rows ahead of it).
+    // Scroll the *outer* Settings ListView — slice 6's TextField in
+    // the LLM section adds an inner editable scrollable that would
+    // make a bare scrollUntilVisible ambiguous.
+    await tester.scrollUntilVisible(
+      find.text('Playback'),
+      200,
+      scrollable: find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(Scrollable),
+      ).first,
+    );
     expect(find.text('Playback'), findsOneWidget);
   });
 }

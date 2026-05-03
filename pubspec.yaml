@@ -12,6 +12,7 @@ environment:
 workspace:
   - apps/mobile
   - packages/core
+  - packages/llm_desktop
   - packages/metadata
   - packages/playback
   - packages/playlist_engine

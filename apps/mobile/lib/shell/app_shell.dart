@@ -6,7 +6,11 @@ import 'settings_screen.dart';
 /// own value into [AppShell] so the shell itself stays stateless — the
 /// "currently selected tab" bit lives implicitly in the current named
 /// route instead of in a [StatefulWidget] bag of local state.
-enum AppTab { tracks, nowPlaying, queue }
+///
+/// Slice 6 appends `ai` (the LLM playlist surface). Order is locked —
+/// slice-1/2/4/5 widget tests assume `tracks=0, nowPlaying=1, queue=2`,
+/// so the new value goes last.
+enum AppTab { tracks, nowPlaying, queue, ai }
 
 /// Common scaffold for every top-level screen in the app.
 ///
@@ -51,6 +55,8 @@ class AppShell extends StatelessWidget {
   static const tracksRoute = '/';
   static const nowPlayingRoute = '/now-playing';
   static const queueRoute = '/queue';
+  // Slice 6 — AI tab landing route.
+  static const aiRoute = '/ai';
 
   static String _routeFor(AppTab tab) {
     switch (tab) {
@@ -60,6 +66,8 @@ class AppShell extends StatelessWidget {
         return nowPlayingRoute;
       case AppTab.queue:
         return queueRoute;
+      case AppTab.ai:
+        return aiRoute;
     }
   }
 
@@ -101,6 +109,14 @@ class AppShell extends StatelessWidget {
             icon: Icon(Icons.queue_music_outlined),
             activeIcon: Icon(Icons.queue_music),
             label: 'Queue',
+          ),
+          // Slice 6 — AI tab. Appended so slice-1..5 widget tests
+          // that index by `Icons.queue_music_outlined` keep finding
+          // their target.
+          BottomNavigationBarItem(
+            icon: Icon(Icons.auto_awesome_outlined),
+            activeIcon: Icon(Icons.auto_awesome),
+            label: 'AI',
           ),
         ],
       ),

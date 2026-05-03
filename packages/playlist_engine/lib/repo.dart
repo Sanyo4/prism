@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
 
+import 'intent.dart';
+
 /// One vec0 hit — `trackId` plus its L2 distance from the seed
 /// embedding. Implementations must filter to `status='ready'` rows.
 @immutable
@@ -117,4 +119,44 @@ abstract class PlaylistRepo {
   /// `RadioEngine.next` when the seed's neighbourhood is sparse
   /// (§10 risk 1).
   Future<List<int>> libraryWideFallback({int limit = 100});
+}
+
+/// Slice-6 extension of [PlaylistRepo]. Adds the SQL-filter
+/// candidate-pool query and the keyword-driven mean-embedding
+/// helper that drive `PlaylistEngine.generate`.
+///
+/// **Spec deviation note** (`docs/notes/slice-06-doc-refresh.md`):
+/// the slice plan §7 sketch included a `trackOf(int) → Track`
+/// method. `Track` lives in `prism_core` and
+/// `packages/playlist_engine` cannot import it. The engine instead
+/// uses [PlaylistRepo.metaOf] (inherited) — `CandidateMeta` already
+/// carries everything the engine needs (`id, artist, title, key,
+/// year, bpm` plus mood scalars). The mobile app materialises
+/// `int → Track` via slice-1's `trackByIdLookupProvider`.
+abstract class TrackRepo extends PlaylistRepo {
+  /// Returns a candidate pool of track ids satisfying [intent]'s
+  /// mood / BPM / era filters at relaxation level [relax]. Bounded
+  /// by [poolSize]. Implementations MUST filter to `status='ready'`
+  /// rows and order by the primary mood column descending so the
+  /// engine's centroid rank step sees the highest-mood rows first
+  /// regardless of any LIMIT truncation.
+  ///
+  /// `RelaxationLevel.loose` widens BPM ±10 and drops era;
+  /// `veryLoose` keeps only the primary mood clause and doubles
+  /// `LIMIT`. The engine cycles through these levels when the
+  /// strict pool is below `length * 4`.
+  Future<List<int>> candidatePoolByIntent(
+    Intent intent, {
+    int poolSize = 200,
+    RelaxationLevel relax = RelaxationLevel.strict,
+  });
+
+  /// Returns an L2-normalized mean embedding derived from the
+  /// [keywords]. Implementations decide how to expand keywords
+  /// into track sets — the SQLite adapter should look up the
+  /// keyword in the mood-lookup table (mapping → 5-mood) and take
+  /// the mean of `status='ready'` rows scoring high on that mood,
+  /// or fall through to the library mean. Returns a zero vector
+  /// only when the library is empty.
+  Future<Float32List> meanEmbeddingForKeywords(List<String> keywords);
 }

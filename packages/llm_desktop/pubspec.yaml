@@ -1,0 +1,21 @@
+name: prism_llm_desktop
+description: >-
+  Pure-Dart Ollama REST client + LlmBackend implementation. Talks to a
+  local Ollama daemon on http://localhost:11434, streams ndjson, parses
+  Qwen3 outputs into the playlist engine's Intent / FinalPass types.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.11.0
+
+resolution: workspace
+
+dependencies:
+  dio: ^5.7.0
+  meta: ^1.16.0
+  prism_playlist_engine: any
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^6.0.0
