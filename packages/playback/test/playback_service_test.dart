@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:prism_cast/cast.dart';
 import 'package:prism_core/core.dart';
 import 'package:prism_playback/playback.dart';
 
@@ -489,4 +490,261 @@ void main() {
       expect(fake.volume, equals(1.0));
     });
   });
+
+  // Slice-9 §6 step 6 + §11 — `setTransport` swaps the active
+  // [CastTransport] while preserving position + playing flag. The
+  // refactor delegates `play / pause / seek / setTrack / setNext`
+  // through `_currentTransport`; slice-1 tests above pass
+  // byte-identical because their default transport is a
+  // `LocalTransport` over the slice-1 fake player and that path is
+  // a one-call passthrough.
+  //
+  // We use a [_TestTransport] fake that records every method call —
+  // network and Cast SDK invocations are out of scope here per the
+  // brief ("no real-network DLNA / Chromecast invocation in tests").
+  group('Slice-9: setTransport swap preserves position + playing flag', () {
+    test(
+      'swap from a playing local session to a fresh transport plays new transport from preserved position',
+      () async {
+        final fake = _FakePlayer();
+        final service = PlaybackService(player: fake);
+        addTearDown(service.dispose);
+
+        // Seed a snapshot so `_snapshot.current` is non-null when
+        // setTransport runs. After the seed, drive the fake's
+        // playhead + playing flag to simulate "30s into a track,
+        // currently playing".
+        await service.syncSnapshot(_snapshotOf([_track('a')]));
+        fake._playing = true;
+        fake._position = const Duration(seconds: 30);
+
+        final next = _TestTransport();
+        await service.setTransport(next);
+
+        expect(next.setTrackCalls, hasLength(1),
+            reason: 'New transport receives the active track.');
+        expect(
+          next.seekCalls.single,
+          equals(const Duration(seconds: 30)),
+          reason: 'Position carries across the swap.',
+        );
+        expect(next.playCalls, equals(1),
+            reason: 'Playing flag carries across the swap.');
+        // Slice-9 invariant: setTrack happens BEFORE seek, seek BEFORE play.
+        expect(next.callOrder.take(3),
+            equals(<String>['setTrack', 'seek', 'play']));
+      },
+    );
+
+    test(
+      'swap from a paused local session does not call play on the new transport',
+      () async {
+        final fake = _FakePlayer();
+        final service = PlaybackService(player: fake);
+        addTearDown(service.dispose);
+
+        await service.syncSnapshot(_snapshotOf([_track('a')]));
+        fake._playing = false;
+        fake._position = const Duration(seconds: 12);
+
+        final next = _TestTransport();
+        await service.setTransport(next);
+
+        expect(next.setTrackCalls, hasLength(1));
+        expect(next.seekCalls.single, equals(const Duration(seconds: 12)));
+        expect(next.playCalls, equals(0),
+            reason: 'Paused transport must not auto-play after a swap.');
+      },
+    );
+
+    test(
+      'swap with no current track skips setTrack / seek / play on the new transport',
+      () async {
+        final fake = _FakePlayer();
+        final service = PlaybackService(player: fake);
+        addTearDown(service.dispose);
+
+        // No syncSnapshot — _snapshot.current stays null.
+        final next = _TestTransport();
+        await service.setTransport(next);
+
+        expect(next.setTrackCalls, isEmpty);
+        expect(next.seekCalls, isEmpty);
+        expect(next.playCalls, equals(0));
+      },
+    );
+
+    test(
+      'setTransport is idempotent on identical(currentTransport, next)',
+      () async {
+        final fake = _FakePlayer();
+        final service = PlaybackService(player: fake);
+        addTearDown(service.dispose);
+
+        final same = service.currentTransport;
+        await service.setTransport(same);
+
+        // Re-asserting `currentTransport` is the same instance is
+        // sufficient — the early-return prevents pause / dispose /
+        // re-subscribe overhead.
+        expect(identical(service.currentTransport, same), isTrue);
+      },
+    );
+
+    test(
+      'play / pause / seek / setTrack / setNext route through currentTransport',
+      () async {
+        final fake = _FakePlayer();
+        final service = PlaybackService(player: fake);
+        addTearDown(service.dispose);
+        await service.syncSnapshot(_snapshotOf([_track('a')]));
+
+        final transport = _TestTransport();
+        await service.setTransport(transport);
+
+        // Snapshot fake call counters AFTER setTransport — the swap
+        // intentionally pauses the local player as part of preserving
+        // continuity (so the OS audio stack doesn't double-source if
+        // a hypothetical mid-swap state existed). We're testing the
+        // user-driven path here, not the swap mechanics.
+        final pausesAfterSwap = fake.pauseCalls;
+        final playsAfterSwap = fake.playCalls;
+
+        await service.play();
+        await service.pause();
+        await service.seek(const Duration(seconds: 5));
+        await service.setTrack(_track('b'));
+        await service.setNext(_track('c'));
+        await service.setNext(null);
+
+        // setTransport itself fires (setTrack, seek, play) at swap
+        // time; we ignore those leading entries and assert the
+        // explicit user-driven calls.
+        final user = transport.callOrder
+            .skipWhile((c) => c != 'pause')
+            .toList();
+        expect(
+          user,
+          equals(<String>[
+            'pause',
+            'seek',
+            'setTrack',
+            'setNext',
+            'setNext',
+          ]),
+        );
+        // The local fake never sees user-driven calls — slice-9's
+        // surface routes through the active transport, not the
+        // underlying port.
+        expect(fake.playCalls, equals(playsAfterSwap),
+            reason: 'service.play() must not reach _player when a '
+                'remote transport is active.');
+        expect(fake.pauseCalls, equals(pausesAfterSwap),
+            reason: 'service.pause() must not reach _player when a '
+                'remote transport is active.');
+      },
+    );
+
+    test(
+      'remote → remote swap disposes the previous remote transport',
+      () async {
+        final fake = _FakePlayer();
+        final service = PlaybackService(player: fake);
+        addTearDown(service.dispose);
+        await service.syncSnapshot(_snapshotOf([_track('a')]));
+
+        final first = _TestTransport();
+        await service.setTransport(first);
+        expect(first.disposeCalls, equals(0));
+
+        final second = _TestTransport();
+        await service.setTransport(second);
+
+        // The old remote (non-Local) transport must be disposed so
+        // its SOAP poll loop / Cast session is released. Per
+        // PlaybackService.setTransport's contract.
+        expect(first.disposeCalls, equals(1));
+        // The new transport stays live until the next swap or
+        // service disposal.
+        expect(second.disposeCalls, equals(0));
+      },
+    );
+  });
+}
+
+/// In-memory [CastTransport] that records every method call and
+/// emits broadcast [TransportEvent]s on demand. Used by the slice-9
+/// `setTransport` extension tests above; the brief mandates "no
+/// real-network DLNA / Chromecast invocation in tests".
+class _TestTransport implements CastTransport {
+  _TestTransport();
+
+  @override
+  String get id => 'test:${identityHashCode(this)}';
+
+  @override
+  String get displayName => 'Test transport';
+
+  @override
+  bool get isLossless => true;
+
+  final _eventsController = StreamController<TransportEvent>.broadcast();
+
+  @override
+  Stream<TransportEvent> get events => _eventsController.stream;
+
+  final List<Track> setTrackCalls = [];
+  final List<Track?> setNextCalls = [];
+  final List<Duration> seekCalls = [];
+  int playCalls = 0;
+  int pauseCalls = 0;
+  int stopCalls = 0;
+  int disposeCalls = 0;
+
+  /// Invocation order — used by tests to assert the
+  /// `setTrack → seek → play` sequence on a swap.
+  final List<String> callOrder = [];
+
+  @override
+  Future<void> setTrack(Track t) async {
+    setTrackCalls.add(t);
+    callOrder.add('setTrack');
+  }
+
+  @override
+  Future<void> setNext(Track? t) async {
+    setNextCalls.add(t);
+    callOrder.add('setNext');
+  }
+
+  @override
+  Future<void> play() async {
+    playCalls++;
+    callOrder.add('play');
+  }
+
+  @override
+  Future<void> pause() async {
+    pauseCalls++;
+    callOrder.add('pause');
+  }
+
+  @override
+  Future<void> seek(Duration to) async {
+    seekCalls.add(to);
+    callOrder.add('seek');
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCalls++;
+    callOrder.add('stop');
+  }
+
+  @override
+  Future<void> dispose() async {
+    if (_eventsController.isClosed) return;
+    disposeCalls++;
+    await _eventsController.close();
+  }
 }

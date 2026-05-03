@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../settings/cast_section.dart';
 import '../theme/settings_theme_section.dart';
 import 'settings_library.dart';
 import 'settings_llm_section.dart';
@@ -49,6 +50,11 @@ class SettingsScreen extends StatelessWidget {
           // still resolves; we deliberately don't reorder slice 1's
           // anchor section.
           const SettingsThemeSection(),
+          // Slice 9 — Cast & DLNA. Sits between Theme and Playback so
+          // the slice-1 widget-test scroll-until-"Playback" still
+          // resolves (the section adds rows above, not below, the
+          // anchor).
+          const CastSection(),
           const SettingsSectionHeader(title: 'Playback'),
           const SettingsSectionPlaceholder(
             subtitle:

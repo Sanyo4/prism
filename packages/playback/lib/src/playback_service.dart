@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:just_audio/just_audio.dart';
+import 'package:prism_cast/cast.dart';
 import 'package:prism_core/core.dart';
 
 import 'audio_player_port.dart';
+import 'cast/local_player_handle.dart';
 import 'queue_service.dart';
 
 /// Thin shim around an [AudioPlayerPort] that keeps the
@@ -53,7 +55,34 @@ import 'queue_service.dart';
 /// resolves immediately. We avoid plumbing a `Future<double?>` through
 /// because volume must apply on the same frame as the source switch
 /// to avoid an audible volume bump on the first sample.
+///
+/// Slice 9 added the **transport seam**. Every `play / pause / seek /
+/// setTrack / setNext` delegates to a `currentTransport` —
+/// [LocalTransport] by default (wraps the slice-1 player so behaviour
+/// is byte-identical), [DlnaTransport] when the user picks a DLNA
+/// receiver in the cast sheet, [ChromecastTransport] (Android only)
+/// for Chromecast. Swapping is a `setTransport(...)` call that
+/// preserves position + playing flag across the swap.
+///
+/// `syncSnapshot` keeps driving the local [AudioPlayerPort] directly
+/// regardless of which transport is active. The local player remains
+/// the source of truth for queue state — when DLNA / Chromecast is
+/// active the local player is paused, but its `currentIndex` /
+/// `currentIndexStream` continue to track snapshot changes so the
+/// queue's `advance` / `retreat` semantics are unchanged. Swapping
+/// back to Local is a single transport swap; the player resumes from
+/// its preserved playhead.
 class PlaybackService {
+  /// Slice-1 backward-compat constructor. Constructs a default
+  /// [LocalTransport] over the supplied or auto-built [player]. The
+  /// slice-1 surface (`syncSnapshot`, fast-path mutators, ReplayGain
+  /// volume application) is unchanged; the slice-9 surface (`play /
+  /// pause / seek / setTrack / setNext / setTransport`) routes
+  /// through the wrapping `LocalTransport`.
+  ///
+  /// Slice-1's 46 `playback_service_test` tests construct via this
+  /// signature; they pass byte-identical because the `LocalTransport`
+  /// path is a one-call passthrough to the underlying port.
   PlaybackService({
     AudioPlayerPort? player,
     bool replayGainEnabled = true,
@@ -62,11 +91,37 @@ class PlaybackService {
     this.measuredReplayGainLookup,
   })  : _player = player ?? JustAudioPlayerPort(),
         _replayGainEnabled = replayGainEnabled {
+    _currentTransport = LocalTransport(player: LocalPlayerHandle(_player));
+    _indexSub = _player.currentIndexStream.listen(_onPlayerIndexChanged);
+  }
+
+  /// Slice-9 native constructor. Used by `apps/mobile`'s provider
+  /// layer to inject an externally-constructed `LocalTransport` (so
+  /// the same `AudioPlayerPort` instance is shared across the
+  /// transport seam). The transport must wrap an `AudioPlayerPort`
+  /// reachable via [audioPlayerPort] — `syncSnapshot`'s fast-path
+  /// mutators address that port directly, not via the duck-typed
+  /// `LocalAudioHandle` surface.
+  PlaybackService.withTransport({
+    required CastTransport currentTransport,
+    required AudioPlayerPort audioPlayerPort,
+    bool replayGainEnabled = true,
+    this.onAdvance,
+    this.onRetreat,
+    this.measuredReplayGainLookup,
+  })  : _player = audioPlayerPort,
+        _replayGainEnabled = replayGainEnabled {
+    _currentTransport = currentTransport;
     _indexSub = _player.currentIndexStream.listen(_onPlayerIndexChanged);
   }
 
   final AudioPlayerPort _player;
   bool _replayGainEnabled;
+
+  /// Active transport. Always non-null after construction.
+  late CastTransport _currentTransport;
+
+  StreamSubscription<TransportEvent>? _transportEventsSub;
 
   /// Synchronous lookup: given a [Track], return the measured (sidecar)
   /// `replaygain_track_db` if the corresponding row is `status='ready'`
@@ -219,9 +274,101 @@ class PlaybackService {
     _emitCurrentTrack();
   }
 
-  Future<void> play() => _player.play();
-  Future<void> pause() => _player.pause();
-  Future<void> seek(Duration position) => _player.seek(position);
+  /// Currently active transport. The default after construction is a
+  /// [LocalTransport] wrapping the slice-1 [AudioPlayerPort];
+  /// [setTransport] swaps to a different transport (DLNA / Chromecast)
+  /// while preserving position + playing flag.
+  CastTransport get currentTransport => _currentTransport;
+
+  /// Slice-9 surface — delegates to [currentTransport].
+  Future<void> play() => _currentTransport.play();
+
+  /// Slice-9 surface — delegates to [currentTransport].
+  Future<void> pause() => _currentTransport.pause();
+
+  /// Slice-9 surface — delegates to [currentTransport].
+  Future<void> seek(Duration position) => _currentTransport.seek(position);
+
+  /// Slice-9 surface — delegates to [currentTransport]. The mobile UI
+  /// calls this when the active track changes during a remote-transport
+  /// session so the receiver picks up the new source. In a local-only
+  /// session, [syncSnapshot] handles this implicitly via the underlying
+  /// port's source-list mutators.
+  Future<void> setTrack(Track t) => _currentTransport.setTrack(t);
+
+  /// Slice-9 surface — queues the next track on [currentTransport].
+  /// Pass `null` to clear. The DLNA implementation forwards via
+  /// `SetNextAVTransportURI`; Local writes to the player's queue tail.
+  Future<void> setNext(Track? t) => _currentTransport.setNext(t);
+
+  /// Swap [currentTransport] to [next]. Preserves the player's
+  /// position + playing flag across the swap so audible state is
+  /// continuous up to the receiver / device handoff latency.
+  ///
+  /// Lifecycle:
+  /// 1. Snapshot position + playing flag from the local player (the
+  ///    canonical playhead — DLNA / Cast transports lag the local
+  ///    state by their poll cadence).
+  /// 2. Pause the previous transport. For [LocalTransport] this
+  ///    pauses the underlying player; for remote transports it
+  ///    sends `Pause` over the wire.
+  /// 3. Replace `_currentTransport` with [next]; re-subscribe to
+  ///    its `events` stream.
+  /// 4. If a current track is loaded, `setTrack(track) → seek(pos) →
+  ///    play()` on the new transport (skipping `play()` if the
+  ///    previous transport was paused at swap time).
+  /// 5. Dispose the previous transport, except when it was a
+  ///    [LocalTransport] — those wrap the slice-1 port which
+  ///    PlaybackService still owns and may re-wrap on a future
+  ///    swap back to Local.
+  Future<void> setTransport(CastTransport next) async {
+    if (_disposed) return;
+    if (identical(_currentTransport, next)) return;
+
+    final wasPlaying = _player.playing;
+    final position = _player.position;
+    final track = _snapshot.current;
+    final old = _currentTransport;
+
+    await old.pause();
+    // Belt-and-suspenders: if the old transport was non-Local, the
+    // local player may still be reflecting the previous Local
+    // session's "playing" flag. Force-pause so the OS audio stack
+    // doesn't double-source if the user rapidly swaps Local → DLNA →
+    // Local.
+    if (_player.playing) {
+      await _player.pause();
+    }
+
+    await _transportEventsSub?.cancel();
+    _currentTransport = next;
+    _transportEventsSub = next.events.listen(_onTransportEvent);
+
+    if (track != null) {
+      await next.setTrack(track);
+      await next.seek(position);
+      if (wasPlaying) {
+        await next.play();
+      }
+    }
+
+    // Dispose the previous transport so its subscriptions / SOAP
+    // poll loop / Cast session release. The slice-9 [LocalPlayerHandle]
+    // adapter explicitly defines its `dispose()` as a no-op so
+    // [LocalTransport.dispose()]'s call to `_player.dispose()`
+    // does NOT tear down the underlying [AudioPlayerPort] — the port
+    // outlives the transport so a swap back to Local can reuse it.
+    await old.dispose();
+  }
+
+  void _onTransportEvent(TransportEvent ev) {
+    // Slice 9 hook for downstream consumers: today this is a no-op.
+    // The DLNA / Chromecast transports surface position updates here;
+    // when slice-9 §11 step 13 (gapless handoff via setNext on
+    // remaining < 5 s) lands, this listener computes the threshold
+    // and dispatches `setNext(peekAfter)`. For now keep it open so
+    // the subscription stays warm.
+  }
 
   /// Advances the queue via [onAdvance]; the resulting
   /// `syncSnapshot` reseeks the player. Does **not** call
@@ -252,12 +399,22 @@ class PlaybackService {
   }
 
   /// Releases the stream subscription, the broadcast controller, and
-  /// the underlying [AudioPlayerPort].
+  /// the underlying [AudioPlayerPort]. Also disposes the active
+  /// transport's network handles when it's a non-Local one.
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
     await _indexSub?.cancel();
     _indexSub = null;
+    await _transportEventsSub?.cancel();
+    _transportEventsSub = null;
+    final transport = _currentTransport;
+    // For LocalTransport, the underlying port is owned by
+    // PlaybackService and disposed below; the transport's own
+    // dispose() is harmless (clears its internal subscriptions). For
+    // remote transports, dispose() releases the SOAP poll loop or
+    // Cast session in addition.
+    await transport.dispose();
     await _currentTrackController.close();
     await _player.dispose();
   }

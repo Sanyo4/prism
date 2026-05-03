@@ -1,9 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart' show PlayerState;
+import 'package:prism_cast/cast.dart';
 import 'package:prism_core/core.dart';
 import 'package:prism_playback/playback.dart';
 
 import 'cache_db_providers.dart';
+import 'cast_providers.dart';
 
 /// Re-export the queue surface from `prism_playback` so every screen
 /// can `import '../providers/playback_providers.dart'` once and reach
@@ -13,9 +15,22 @@ import 'cache_db_providers.dart';
 export 'package:prism_playback/playback.dart'
     show PlaybackService, QueueService, QueueSnapshot, QueueZone, queueProvider;
 
+/// Underlying slice-1 [AudioPlayerPort]. One per app session.
+/// `playbackServiceProvider` consumes this for `syncSnapshot`'s
+/// fast-path mutators; the slice-9 [LocalTransport] also wraps this
+/// instance via a `LocalPlayerHandle` adapter so the same just_audio
+/// session backs both surfaces. Keeping the port behind its own
+/// provider lets tests inject a fake without overriding the whole
+/// service.
+final audioPlayerPortProvider = Provider<AudioPlayerPort>((ref) {
+  final port = JustAudioPlayerPort();
+  ref.onDispose(port.dispose);
+  return port;
+});
+
 /// Eager, container-scoped [PlaybackService].
 ///
-/// Two wiring details matter:
+/// Three wiring details matter:
 ///
 /// 1. `onAdvance` / `onRetreat` drive the queue, not the player. Both
 ///    [QueueService.advance] and [QueueService.retreat] update the
@@ -26,8 +41,20 @@ export 'package:prism_playback/playback.dart'
 ///    snapshot at wire-up. That forces a first [PlaybackService.syncSnapshot]
 ///    call and exercises the "drained queue → pause" branch — no
 ///    special-case at app boot.
+/// 3. Slice 9 — the service is constructed via
+///    [PlaybackService.withTransport] so the [LocalTransport] wrapping
+///    [audioPlayerPortProvider] is the single source of truth for
+///    "what's the active transport". A second `ref.listen` watches
+///    [transportProvider] and forwards any swap (Local → DLNA,
+///    DLNA → Cast, etc.) to [PlaybackService.setTransport]. The
+///    Notifier doesn't import `prism_playback` directly — keeps the
+///    cast / playback provider files mutually independent.
 final playbackServiceProvider = Provider<PlaybackService>((ref) {
-  final service = PlaybackService(
+  final port = ref.watch(audioPlayerPortProvider);
+  final localTransport = LocalTransport(player: LocalPlayerHandle(port));
+  final service = PlaybackService.withTransport(
+    currentTransport: localTransport,
+    audioPlayerPort: port,
     onAdvance: () => ref.read(queueProvider.notifier).advance(),
     onRetreat: () => ref.read(queueProvider.notifier).retreat(),
     // Slice-4: prefer measured RG (sidecar cache) over tag RG when
@@ -36,6 +63,11 @@ final playbackServiceProvider = Provider<PlaybackService>((ref) {
     // is still loading, falling cleanly back to tag values until then.
     measuredReplayGainLookup: measuredRgLookupOf(ref),
   );
+  // Initialise the cast-side transport state. `transportProvider`'s
+  // build() throws by default; the override below keeps it in sync
+  // with the service's currentTransport from the moment the provider
+  // is first watched.
+  ref.read(transportProvider.notifier).set(localTransport);
   ref.listen<QueueSnapshot>(
     queueProvider,
     (prev, next) {
@@ -45,6 +77,18 @@ final playbackServiceProvider = Provider<PlaybackService>((ref) {
       service.syncSnapshot(next);
     },
     fireImmediately: true,
+  );
+  // Slice-9 §6 step 6: when the cast sheet swaps transports the
+  // notifier publishes the new value here. We forward to the
+  // service's setTransport so position + playing flag carry across.
+  ref.listen<CastTransport>(
+    transportProvider,
+    (prev, next) {
+      if (prev == null) return; // initial set above; no swap.
+      if (identical(prev, next)) return;
+      // ignore: discarded_futures
+      service.setTransport(next);
+    },
   );
   ref.onDispose(service.dispose);
   return service;

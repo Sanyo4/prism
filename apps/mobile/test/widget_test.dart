@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile/providers/cast_providers.dart';
 import 'package:mobile/providers/llm_providers.dart';
+import 'package:prism_cast/cast.dart';
 import 'package:prism_llm_desktop/llm_desktop.dart';
 
 import 'package:mobile/app.dart';
@@ -33,6 +35,17 @@ void main() {
               detail: 'overridden in widget test',
             );
           }),
+          // Slice 9 — the SettingsScreen now renders `CastSection`
+          // which subscribes to `castDiscoveryProvider`. The default
+          // implementation constructs a `Discovery` that arms a 5-min
+          // refresh `Timer.periodic`; under flutter_test that timer
+          // outlives the test and trips
+          // `_verifyInvariants(timersPending)`. Override with an
+          // empty broadcast stream so the section renders its
+          // "Scanning…" placeholder without spinning the timer.
+          castDiscoveryProvider.overrideWith(
+            (ref) => const Stream<List<DlnaDevice>>.empty(),
+          ),
         ],
         child: const PrismApp(),
       ),

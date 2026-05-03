@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_core/core.dart';
 import 'package:prism_ui/ui.dart';
 
+import '../providers/cast_providers.dart';
 import '../providers/metadata_providers.dart';
 import '../providers/playback_providers.dart';
 import '../providers/radio_providers.dart';
@@ -40,6 +41,13 @@ class LibraryScreen extends ConsumerWidget {
     // tests that don't render Library don't need the metadata repo.
     // ignore: unused_result
     ref.watch(backfillKickoffProvider);
+    // Slice 9 — probe persisted manual IPs once on launch so the
+    // STR-DN1080 (or any other receiver added on a multicast-blocked
+    // network) re-appears in the cast sheet without requiring the
+    // user to re-type its IP. The provider returns a `Future<void>`
+    // and runs at most once per ProviderContainer lifetime.
+    // ignore: unused_result
+    ref.watch(castProbeManualOnLaunchProvider);
 
     return DefaultTabController(
       length: 6,

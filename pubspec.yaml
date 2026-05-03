@@ -11,6 +11,7 @@ environment:
 
 workspace:
   - apps/mobile
+  - packages/cast
   - packages/core
   - packages/llm_desktop
   - packages/llm_mobile

@@ -34,6 +34,12 @@ dependencies:
   # Glass, AuroraBackground, hero tag builders). Track B (this app)
   # composes them into ThemeData via `lib/theme/prism_theme.dart`.
   prism_ui: any
+  # Slice 9 — Cast & DLNA package. UI consumes `LocalTransport`,
+  # `DlnaTransport`, `Discovery`, `MediaServer`, `IpSelector`, plus
+  # the `kHasChromecastSupport` flag. Linux desktop pulls the dep
+  # but never reaches the Chromecast-only code paths
+  # (`Platform.isAndroid` gate inside `cast_sheet.dart`).
+  prism_cast: any
 
   # Direct runtime deps (tight surface for slice 1)
   just_audio: ^0.10.5

@@ -4,9 +4,11 @@ import 'package:just_audio/just_audio.dart';
 import 'package:prism_core/core.dart';
 import 'package:prism_ui/ui.dart';
 
+import '../providers/cast_providers.dart';
 import '../providers/playback_providers.dart';
 import '../shell/app_shell.dart';
 import '../theme/palette_providers.dart';
+import '../widgets/cast_sheet.dart';
 import '../widgets/radio_badge.dart';
 import '../widgets/steer_chip_bar.dart';
 
@@ -46,6 +48,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 
     final palette = _resolvePalette(track);
     final theme = Theme.of(context);
+    final activeTransport = ref.watch(transportProvider);
+    final isRemote = activeTransport.id != 'local';
 
     return Theme(
       data: theme.copyWith(
@@ -62,6 +66,16 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         useAurora: AuroraVariant.player,
         auroraAccentOverride:
             palette.isNeutral ? null : palette.dominant,
+        // Slice 9 — cast icon. `Icons.cast_connected` when a remote
+        // transport (DLNA / Chromecast) is active; `Icons.cast`
+        // otherwise. Tap always opens the sheet.
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'Cast',
+            icon: Icon(isRemote ? Icons.cast_connected : Icons.cast),
+            onPressed: () => CastSheet.show(context),
+          ),
+        ],
         child: track == null
             ? const _IdleView()
             : _PlayerView(

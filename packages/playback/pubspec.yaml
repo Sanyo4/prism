@@ -23,6 +23,12 @@ dependencies:
   # The CacheDb type lives in prism_core; this dep is transitively
   # already satisfied by `prism_core: any` but we don't repeat
   # sqflite/sqlite3 here — playback only sees the Dart-typed handle.
+  # Slice 9 — `PlaybackService` holds a `CastTransport currentTransport`
+  # for the slice-9 transport seam. The default transport wraps the
+  # slice-1 `AudioPlayerPort` via a `LocalAudioHandle` adapter so the
+  # slice-1 surface is unchanged; non-Local transports (DLNA /
+  # Chromecast) live in `prism_cast` and route audio off-device.
+  prism_cast: any
 
 dev_dependencies:
   flutter_test:
