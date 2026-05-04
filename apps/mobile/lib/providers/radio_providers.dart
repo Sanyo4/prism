@@ -31,6 +31,7 @@ library;
 
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:meta/meta.dart';
 // `prism_core` and `prism_playlist_engine` both export a `KnnHit` —
@@ -211,6 +212,13 @@ class RadioSessionNotifier extends Notifier<RadioSession?> {
   }
 
   Future<void> startFromTrack(Track track) async {
+    assert(() {
+      debugPrint(
+        '[RadioDiag] startFromTrack input path=${track.path} '
+        'title=${track.title}',
+      );
+      return true;
+    }());
     final repo = await ref.read(playlistRepoProvider.future);
     final pathToId = await ref.read(pathToIdProvider.future);
     final id = pathToId[track.path];
@@ -218,11 +226,24 @@ class RadioSessionNotifier extends Notifier<RadioSession?> {
       // No cache row for this path — track hasn't been ingested yet
       // (e.g. fresh scan still in flight). Surface to the caller; UI
       // can show a "Library still indexing" snackbar.
+      assert(() {
+        debugPrint(
+          '[RadioDiag] startFromTrack abort: no cache_db row for '
+          '${track.path}',
+        );
+        return true;
+      }());
       throw StateError(
         'no cache_db row for ${track.path}; library ingest may still be '
         'in progress',
       );
     }
+    assert(() {
+      debugPrint(
+        '[RadioDiag] startFromTrack resolved id=$id; building RadioSession',
+      );
+      return true;
+    }());
     final session = await RadioEngine.fromTrack(
       trackId: id,
       title: track.title ?? _basename(track.path),
@@ -237,6 +258,10 @@ class RadioSessionNotifier extends Notifier<RadioSession?> {
         lastUsedAt: DateTime.now(),
       ),
     );
+    assert(() {
+      debugPrint('[RadioDiag] startFromTrack end (manager booted)');
+      return true;
+    }());
   }
 
   Future<void> startFromAlbum({
@@ -377,6 +402,28 @@ class RadioSessionNotifier extends Notifier<RadioSession?> {
     // Pull the post-prime session (5 picks have been made) and
     // publish.
     state = manager.session;
+
+    // Slice-11 §A1 fix — kick playback so the user actually hears the
+    // first radio track. `LookaheadManager.start` appends 5 tracks
+    // through `QueueService.appendForRadio`; the first one is promoted
+    // to `current` (slice-11 §A1 fix in queue_service.dart). But the
+    // player only auto-resumes when `wasPlaying=true` in
+    // `syncSnapshot`; if the user long-pressed without anything
+    // playing, `wasPlaying=false` and the first source loads silently.
+    // Calling `play()` here makes the long-press → "Radio started"
+    // affordance produce sound on cold-start. No-op when something was
+    // already playing (`play` on an already-playing player is idempotent).
+    assert(() {
+      debugPrint(
+        '[RadioDiag] _bootSession manager booted; ringLen='
+        '${manager.ring.length}; calling playback.play()',
+      );
+      return true;
+    }());
+    // ignore: discarded_futures — fire-and-forget; the service serialises
+    // its own operations and we don't want to gate the snackbar on the
+    // first-frame audio decode.
+    playback.play();
 
     // Persist to recent seeds.
     await ref.read(recentSeedsProvider.notifier).upsert(seedEntry);

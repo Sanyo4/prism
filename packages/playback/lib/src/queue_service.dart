@@ -158,7 +158,26 @@ class QueueService extends Notifier<QueueSnapshot> {
   ///
   /// PlayNext head is preserved because we never read it; only
   /// `upcoming` is rebuilt.
+  ///
+  /// **Slice-11 §A1 fix.** When [QueueZone.current] is `null` (drained
+  /// queue — i.e. user long-pressed a track and started radio without
+  /// anything currently playing), the first appended radio track is
+  /// promoted to `current` so `PlaybackService.syncSnapshot` has a
+  /// source to play. Without this promotion `syncSnapshot` would hit
+  /// the `next.current == null` branch and pause — producing the
+  /// "Radio started" snackbar with nothing actually playing. Subsequent
+  /// `appendForRadio` calls on the same drained-then-promoted queue
+  /// land at the tail of [QueueZone.upcoming] as before.
   void appendForRadio(Track track) {
+    if (state.current == null) {
+      state = QueueSnapshot(
+        history: state.history,
+        current: track,
+        playNext: state.playNext,
+        upcoming: state.upcoming,
+      );
+      return;
+    }
     state = QueueSnapshot(
       history: state.history,
       current: state.current,

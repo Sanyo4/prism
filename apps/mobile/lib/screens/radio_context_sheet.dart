@@ -88,6 +88,19 @@ class RadioContextSheet {
     WidgetRef ref,
     Track track,
   ) async {
+    // Slice-11 §A1 — short-circuit when vec0 isn't loaded so the user
+    // sees an honest error instead of "Radio started" with no music.
+    if (Vec0Loader.loadFailed) {
+      assert(() {
+        debugPrint(
+          '[RadioDiag] startFromTrack(convenience) blocked: '
+          'Vec0Loader.loadFailed=true (${Vec0Loader.loadFailureMessage})',
+        );
+        return true;
+      }());
+      _snack(context, 'Radio unavailable — embeddings disabled');
+      return;
+    }
     await ref.read(radioSessionProvider.notifier).startFromTrack(track);
     if (context.mounted) _snack(context, 'Radio started');
   }
@@ -99,6 +112,22 @@ class RadioContextSheet {
     SeedRef seed,
   ) async {
     Navigator.of(sheetContext).pop();
+    // Slice-11 §A1 — vec0 degraded mode produces a "Radio started"
+    // snackbar but no audio. Detect early and replace the snackbar
+    // copy with an honest "Radio unavailable" message.
+    if (Vec0Loader.loadFailed) {
+      assert(() {
+        debugPrint(
+          '[RadioDiag] _start blocked: Vec0Loader.loadFailed=true '
+          '(${Vec0Loader.loadFailureMessage})',
+        );
+        return true;
+      }());
+      if (context.mounted) {
+        _snack(context, 'Radio unavailable — embeddings disabled');
+      }
+      return;
+    }
     final notifier = ref.read(radioSessionProvider.notifier);
     switch (seed) {
       case TrackSeed():

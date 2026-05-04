@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:prism_core/core.dart';
 import 'package:prism_playback/playback.dart';
 import 'package:prism_playlist_engine/playlist_engine.dart';
@@ -196,18 +197,39 @@ class LookaheadManager {
     if (session == null) return false;
     final result = await engine.next(session, repo);
     if (_disposed) return false;
-    if (result == null) return false;
+    if (result == null) {
+      assert(() {
+        debugPrint('[RadioDiag] LookaheadManager._pickOne engine returned null '
+            '(empty library / sparse seed exhausted)');
+        return true;
+      }());
+      return false;
+    }
     final track = trackByIdLookup(result.pickedTrackId);
     if (track == null) {
       // §10 risk 4 — id no longer resolves; skip this pick. Caller
       // re-tries the next advance; if this keeps happening we should
       // re-seed (deferred until we can detect the pattern reliably).
+      assert(() {
+        debugPrint(
+          '[RadioDiag] LookaheadManager._pickOne id=${result.pickedTrackId} '
+          'has no live Track row — skipping',
+        );
+        return true;
+      }());
       return false;
     }
     _session = result.nextSession;
     _ring.add(result.pickedTrackId);
     if (appendToQueue) {
       queue.appendForRadio(track);
+      assert(() {
+        debugPrint(
+          '[RadioDiag] LookaheadManager._pickOne appended id='
+          '${result.pickedTrackId} path=${track.path}; ringLen=${_ring.length}',
+        );
+        return true;
+      }());
     }
     return true;
   }

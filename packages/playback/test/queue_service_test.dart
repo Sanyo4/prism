@@ -353,5 +353,37 @@ void main() {
       expect(_paths(_snap(c).flat), equals(flatBefore));
       expect(_snap(c).currentIndex, equals(idxBefore));
     });
+
+    // Slice-11 §A1 regression: long-press → Start Radio with nothing
+    // currently playing. `LookaheadManager.start` calls `appendForRadio`
+    // five times into a drained queue. Before the fix, `current` stayed
+    // null and `PlaybackService.syncSnapshot` paused — producing the
+    // "Radio started" snackbar with zero audio. The fix promotes the
+    // first appended track to `current` so playback can begin.
+    test('with radioMode=true and drained queue, the first appendForRadio '
+        'promotes the track to current; subsequent calls land in upcoming',
+        () {
+      final (service: q, container: c) = _harness();
+      q.radioMode.set(true);
+      // No loadContext — queue is empty, current is null.
+      expect(_snap(c).current, isNull);
+
+      q.appendForRadio(_t('r1'));
+      // First radio pick is promoted to current so syncSnapshot has a
+      // source to play.
+      expect(_snap(c).current?.path, '/music/r1.flac');
+      expect(_paths(_snap(c).upcoming), isEmpty);
+
+      // Subsequent picks land in upcoming as before.
+      q.appendForRadio(_t('r2'));
+      q.appendForRadio(_t('r3'));
+      expect(_snap(c).current?.path, '/music/r1.flac');
+      expect(_paths(_snap(c).upcoming),
+          equals(['/music/r2.flac', '/music/r3.flac']));
+      expect(
+        _paths(_snap(c).flat),
+        equals(['/music/r1.flac', '/music/r2.flac', '/music/r3.flac']),
+      );
+    });
   });
 }

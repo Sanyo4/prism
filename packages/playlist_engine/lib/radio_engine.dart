@@ -47,7 +47,16 @@ class RadioEngine {
     required String title,
     required PlaylistRepo repo,
   }) async {
+    assert(() {
+      print('[RadioDiag] RadioEngine.fromTrack id=$trackId title="$title"');
+      return true;
+    }());
     final raw = await repo.embeddingOf(trackId);
+    assert(() {
+      print('[RadioDiag] RadioEngine.fromTrack embedding ok '
+          'dims=${raw.length}');
+      return true;
+    }());
     final norm = _l2Normalize(raw);
     return RadioSession(
       seed: TrackSeed(trackId: trackId, title: title),
@@ -105,8 +114,24 @@ class RadioEngine {
       );
     }
 
+    // Slice-11 §A1 diagnostic — capture the seed entry point so
+    // `adb logcat | grep RadioDiag` traces every engine pick. Wrapped
+    // in assert so release builds strip the print.
+    assert(() {
+      final seedDesc = session.seed is TrackSeed
+          ? 'TrackSeed(${(session.seed as TrackSeed).trackId})'
+          : session.seed.runtimeType.toString();
+      print('[RadioDiag] RadioEngine.next start seed=$seedDesc '
+          'historyLen=${session.history.length}');
+      return true;
+    }());
+
     // Fetch top-200 neighbours.
     final hits = await repo.knnByEmbedding(session.seedEmbedding, k: 200);
+    assert(() {
+      print('[RadioDiag] RadioEngine.next knn hits=${hits.length}');
+      return true;
+    }());
 
     // Resolve seed metadata if the seed is a track — used by
     // mood-anchored chip kernels.
@@ -197,6 +222,13 @@ class RadioEngine {
       final score = sim * chip * flowBonus;
       heap.add(_Scored(meta, score, sim, chip, flowBonus));
     }
+    assert(() {
+      print(
+        '[RadioDiag] RadioEngine.next end heap=${heap.length} '
+        'workingSet=${workingSet.length} fromKnn=$fromKnn',
+      );
+      return true;
+    }());
     if (heap.isEmpty) return null;
     final picked = heap.first;
     return PickResult(
