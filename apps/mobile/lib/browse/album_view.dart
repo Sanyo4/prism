@@ -70,32 +70,86 @@ class AlbumView {
       );
 }
 
-/// Pure derivation: groups [tracks] by `(albumArtist ?? artist) ∷ album`,
-/// sorts albums by title (case-insensitive), and joins each group with
-/// the resolved cover URL when available.
+/// Pure derivation: groups [tracks] using a two-pass canonical-album-
+/// artist resolution that fixes the slice-10 §2.4 grouping bug.
+///
+/// Pass 1 — walk every track. For each `(album-title-lower, trimmed)`
+/// key, collect the multiset of distinct non-null `albumArtist` values.
+/// The canonical artist for that title is the most-frequent non-null
+/// entry (ties broken by first-seen order to keep grouping deterministic
+/// across rebuilds).
+///
+/// Pass 2 — group every track. The id is
+/// `<canonicalAlbumArtist OR _normalizeArtist(track.artist)> ∷ <album>`.
+/// `Track.albumArtist` is never mutated; the original tag flows
+/// untouched into the queue / palette / radio paths.
 ///
 /// [releaseMbidByPath]: absolute file path → release MBID (from
 /// `track_meta`).
 /// [coverByReleaseMbid]: release MBID → CAA URL (from `metadata_cache`
 /// rows whose `kind == 'caa'`). Either map may be empty during a cold
 /// scan — albums then render the gradient fallback tile.
-///
-/// Why we don't sort by year: slice 7 polish does an Apple Music-style
-/// "Year added → year released" sort with a setting; for slice 2 a
-/// title sort is the predictable default so the ordering is identical
-/// across rebuilds.
 List<AlbumView> indexAlbums(
   List<Track> tracks,
   Map<String, String?> releaseMbidByPath,
   Map<String, String?> coverByReleaseMbid,
 ) {
-  final groups = <String, List<Track>>{};
+  // Pass 1 — collect canonical album-artist hints per album title.
+  final seenOrder = <String, List<String>>{};
+  final counts = <String, Map<String, int>>{};
   for (final t in tracks) {
-    groups.putIfAbsent(_idFor(t), () => []).add(t);
+    final albumKey = (t.album?.trim().isNotEmpty ?? false)
+        ? t.album!.trim().toLowerCase()
+        : 'unknown album';
+    final aa = t.albumArtist?.trim();
+    if (aa == null || aa.isEmpty) continue;
+    final list = seenOrder.putIfAbsent(albumKey, () => <String>[]);
+    if (!list.contains(aa)) list.add(aa);
+    final m = counts.putIfAbsent(albumKey, () => <String, int>{});
+    m.update(aa, (c) => c + 1, ifAbsent: () => 1);
+  }
+  final canonicalByAlbum = <String, String>{};
+  counts.forEach((albumKey, m) {
+    String? bestKey;
+    var bestCount = -1;
+    for (final entry in seenOrder[albumKey]!) {
+      final c = m[entry] ?? 0;
+      if (c > bestCount) {
+        bestCount = c;
+        bestKey = entry;
+      }
+    }
+    if (bestKey != null) canonicalByAlbum[albumKey] = bestKey;
+  });
+
+  // Pass 2 — group each track using the canonical hint or the
+  // normalised artist fallback.
+  final groups = <String, List<Track>>{};
+  final groupArtistDisplay = <String, String>{};
+  for (final t in tracks) {
+    final albumKey = (t.album?.trim().isNotEmpty ?? false)
+        ? t.album!.trim().toLowerCase()
+        : 'unknown album';
+    final canonical = canonicalByAlbum[albumKey];
+    final groupArtist = canonical ?? _normalizeArtist(t.artist ?? '');
+    final albumDisplay = (t.album?.trim().isNotEmpty ?? false)
+        ? t.album!.trim()
+        : 'Unknown Album';
+    final id = '$groupArtist∷$albumDisplay';
+    groups.putIfAbsent(id, () => <Track>[]).add(t);
+    groupArtistDisplay.putIfAbsent(id, () {
+      if (groupArtist.isNotEmpty) return groupArtist;
+      return 'Unknown Artist';
+    });
   }
   final views = groups.entries
       .map((e) => _buildAlbumView(
-          e.key, e.value, releaseMbidByPath, coverByReleaseMbid))
+            e.key,
+            e.value,
+            groupArtistDisplay[e.key] ?? 'Unknown Artist',
+            releaseMbidByPath,
+            coverByReleaseMbid,
+          ))
       .toList()
     ..sort((a, b) {
       final t = a.title.toLowerCase().compareTo(b.title.toLowerCase());
@@ -108,6 +162,7 @@ List<AlbumView> indexAlbums(
 AlbumView _buildAlbumView(
   String id,
   List<Track> ts,
+  String artistDisplay,
   Map<String, String?> releaseMbidByPath,
   Map<String, String?> coverByReleaseMbid,
 ) {
@@ -127,23 +182,12 @@ AlbumView _buildAlbumView(
   return AlbumView(
     id: id,
     title: _albumTitle(ts.first),
-    artist: _albumArtist(ts.first),
+    artist: artistDisplay,
     year: _firstYear(ts),
     coverUrl: coverUrl,
     releaseMbid: releaseMbid,
     tracks: List.unmodifiable(ts),
   );
-}
-
-String _idFor(Track t) {
-  final aa = (t.albumArtist?.trim().isNotEmpty ?? false)
-      ? t.albumArtist!.trim()
-      : (t.artist?.trim() ?? '');
-  final al = (t.album?.trim().isNotEmpty ?? false)
-      ? t.album!.trim()
-      : 'Unknown Album';
-  // U+2237 PROPORTION as a separator that cannot appear in a real tag.
-  return '$aa∷$al';
 }
 
 String _albumTitle(Track t) {
@@ -152,17 +196,35 @@ String _albumTitle(Track t) {
   return al;
 }
 
-String _albumArtist(Track t) {
-  final aa = t.albumArtist?.trim();
-  if (aa != null && aa.isNotEmpty) return aa;
-  final a = t.artist?.trim();
-  if (a != null && a.isNotEmpty) return a;
-  return 'Unknown Artist';
-}
-
 int? _firstYear(List<Track> ts) {
   for (final t in ts) {
     if (t.year != null) return t.year;
   }
   return null;
+}
+
+/// Strips collaborator suffixes from an artist string. Case-insensitive
+/// match against `feat.`, `ft.`, `featuring`, `(feat. …)`, `(with …)`.
+/// `&` and `,` separators do not strip — they imply genuine multi-artist
+/// credits the user usually wants kept distinct.
+///
+/// Single-pass regex match — strips from the first marker onward, so
+/// `X feat. Y feat. Z` becomes `X`. Keeps trim semantics consistent
+/// with the rest of the album indexer.
+String _normalizeArtist(String input) {
+  if (input.trim().isEmpty) return '';
+  // The regex matches `(feat. anything-to-end)`, `(with anything)`,
+  // `(ft. anything)`, `feat. ...`, `ft. ...`, `featuring ...`,
+  // case-insensitively. The `\s+` before the marker prevents matching
+  // inside artist names that happen to contain "ft" as a substring.
+  final stripped = input.replaceFirst(
+    RegExp(
+      r'\s*(?:[(\[]\s*)?'
+      r'(?:feat\.?|ft\.?|featuring|with)\s'
+      r'.*$',
+      caseSensitive: false,
+    ),
+    '',
+  );
+  return stripped.trim();
 }
