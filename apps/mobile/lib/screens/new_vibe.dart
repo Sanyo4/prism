@@ -27,7 +27,13 @@ import '../widgets/playlist_result_card.dart';
 /// `PlaylistResult.ready` the sheet stays open until the user taps
 /// "Play" or closes it.
 class NewVibeSheet extends ConsumerStatefulWidget {
-  const NewVibeSheet({super.key});
+  const NewVibeSheet({super.key, this.initialPrompt});
+
+  /// Optional prompt text to pre-fill the compose field. When
+  /// provided (e.g. from a prompt-suggestion tile in [AiTabScreen]),
+  /// the text controller is seeded in `initState` so the Go button
+  /// enables immediately without the user typing anything.
+  final String? initialPrompt;
 
   /// Push this screen via the named route registered in
   /// [PrismApp.routes]. Returns when the user dismisses.
@@ -40,6 +46,15 @@ class NewVibeSheet extends ConsumerStatefulWidget {
 class _NewVibeSheetState extends ConsumerState<NewVibeSheet> {
   final _controller = TextEditingController();
   String? _activeVibe;
+
+  @override
+  void initState() {
+    super.initState();
+    final prompt = widget.initialPrompt;
+    if (prompt != null && prompt.isNotEmpty) {
+      _controller.text = prompt;
+    }
+  }
 
   @override
   void dispose() {

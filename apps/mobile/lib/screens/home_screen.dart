@@ -6,10 +6,10 @@ import '../providers/metadata_providers.dart';
 import '../providers/playback_providers.dart';
 import '../shell/app_shell.dart';
 import '../widgets/artist_tile.dart';
+import '../widgets/compose_card.dart';
 import '../widgets/discover_grids.dart';
 import '../widgets/embedded_art.dart';
 import '../widgets/mood_chip_row.dart';
-import 'ai_tab.dart';
 import 'artist_detail_screen.dart';
 
 /// Home — greeting + AI compose card + featured / artists / recent
@@ -51,7 +51,7 @@ class HomeScreen extends ConsumerWidget {
             const _GreetingBlock(),
             SizedBox(height: tokens.s4),
             // Hero one-tap AI playlist composer card.
-            const _ComposeCard(),
+            const ComposeCard(),
             SizedBox(height: tokens.s4),
             // Mood chips — pre-existing slice-4 surface, polished
             // for the wireframe by riding the same horizontal
@@ -159,122 +159,6 @@ class _GreetingBlock extends StatelessWidget {
                     ? 'Evening'
                     : 'Tonight';
     return '$weekday $daypart'.toUpperCase();
-  }
-}
-
-class _ComposeCard extends StatelessWidget {
-  const _ComposeCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.extension<SpaceTokens>()!;
-    final scale = theme.extension<TypographyScale>()!;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () {
-          Navigator.of(context).pushNamed(AiTabScreen.routeName);
-        },
-        child: Glass(
-          intensity: GlassIntensity.heavy,
-          radius: 20,
-          padding: EdgeInsets.all(tokens.s4),
-          child: Stack(
-            children: [
-              // Lilac glow blob in the top-right corner.
-              Positioned(
-                right: -30,
-                top: -30,
-                child: IgnorePointer(
-                  child: Container(
-                    width: 160,
-                    height: 160,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: <Color>[
-                          const Color(0xFFC8B4FF).withValues(alpha: 0.7),
-                          const Color(0x00C8B4FF),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 26,
-                        height: 26,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: <Color>[
-                              Color(0xFF9BB8FF),
-                              Color(0xFFD0A8FF),
-                            ],
-                          ),
-                          boxShadow: <BoxShadow>[
-                            BoxShadow(
-                              color: Color(0x809BB8FF),
-                              blurRadius: 8,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.auto_awesome,
-                          size: 14,
-                          color: Colors.white,
-                        ),
-                      ),
-                      SizedBox(width: tokens.s2),
-                      Text(
-                        'ONE-TAP PLAYLIST',
-                        style: scale.caption13.copyWith(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.5,
-                          color: const Color(0xFF6E4AB8),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: tokens.s2),
-                  Text(
-                    "Describe a mood.\nWe'll compose the rest.",
-                    style: scale.display28.copyWith(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: -0.4,
-                      height: 1.15,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  ),
-                  SizedBox(height: tokens.s1),
-                  Text(
-                    '"Rainy Sunday, slow coffee, jazz" →',
-                    style: scale.body16.copyWith(
-                      fontSize: 13,
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 

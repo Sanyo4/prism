@@ -103,7 +103,10 @@ class _PrismAppState extends ConsumerState<PrismApp> {
         // screen.
         '/now-playing': (_) => const NowPlayingScreen(),
         '/queue': (_) => const QueueScreen(),
-        NewVibeSheet.routeName: (_) => const NewVibeSheet(),
+        NewVibeSheet.routeName: (ctx) {
+          final args = ModalRoute.of(ctx)?.settings.arguments;
+          return NewVibeSheet(initialPrompt: args is String ? args : null);
+        },
       },
     );
   }
