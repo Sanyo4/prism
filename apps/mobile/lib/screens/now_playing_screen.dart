@@ -443,10 +443,10 @@ class _PlayerView extends StatelessWidget {
   }
 }
 
-/// Slice 7 — circular play/pause button with a palette-driven gradient.
-/// Falls back to a flat primary fill when the palette is neutral so a
-/// non-hero surface (slice-7 spec stays neutral on MiniPlayer / queue)
-/// never renders a gradient.
+/// Slice 10 §B4 — circular play/pause button with a palette-driven
+/// linear gradient (top → 25% darker bottom), a radial specular
+/// highlight at top-left, and outer box-shadows for depth. Slice 7
+/// fallback: neutral palettes use theme primary as base, not a flat fill.
 class _PlayPauseButton extends StatelessWidget {
   const _PlayPauseButton({
     required this.palette,
@@ -463,44 +463,82 @@ class _PlayPauseButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fill = palette.isNeutral
-        ? null
-        : LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: <Color>[palette.dominant, palette.secondary],
-          );
-    return Material(
-      color: palette.isNeutral
-          ? theme.colorScheme.primary.withValues(alpha: 0.08)
-          : Colors.transparent,
-      shape: const CircleBorder(),
-      child: Ink(
-        decoration: BoxDecoration(
-          gradient: fill,
-          shape: BoxShape.circle,
-        ),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: isBuffering ? null : onPressed,
-          child: SizedBox(
-            width: 72,
-            height: 72,
-            child: isBuffering
-                ? const Center(
-                    child: SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(strokeWidth: 3),
-                    ),
-                  )
-                : Icon(
-                    isPlaying ? Icons.pause : Icons.play_arrow,
-                    size: 40,
-                    color: palette.isNeutral
-                        ? theme.colorScheme.primary
-                        : palette.textOnDominant,
+    // Resolve the base accent: album palette dominant when non-neutral,
+    // otherwise theme primary (neutral surfaces still get a tint).
+    final base = palette.isNeutral ? theme.colorScheme.primary : palette.dominant;
+    final darker = Color.lerp(base, Colors.black, 0.25) ?? base;
+    final iconColor = palette.isNeutral
+        ? theme.colorScheme.onPrimary
+        : palette.textOnDominant;
+
+    return SizedBox(
+      width: 72,
+      height: 72,
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: Ink(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [base, darker],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: base.withValues(alpha: 0.40),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+              const BoxShadow(
+                color: Color(0x33000000),
+                blurRadius: 6,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Radial specular highlight on top of the linear gradient.
+              // ~32% / ~28% from top-left, fading to transparent at ~55% radius.
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    center: Alignment(-0.36, -0.44),
+                    radius: 0.55,
+                    colors: [
+                      Color(0x99FFFFFF),
+                      Color(0x00FFFFFF),
+                    ],
                   ),
+                ),
+              ),
+              InkWell(
+                customBorder: const CircleBorder(),
+                onTap: isBuffering ? null : onPressed,
+                child: SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: isBuffering
+                      ? const Center(
+                          child: SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(strokeWidth: 3),
+                          ),
+                        )
+                      : Icon(
+                          isPlaying ? Icons.pause : Icons.play_arrow,
+                          size: 26,
+                          color: iconColor,
+                        ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
