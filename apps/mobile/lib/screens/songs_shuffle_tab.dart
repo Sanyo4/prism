@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_core/core.dart';
+import 'package:prism_playlist_engine/playlist_engine.dart' show SteerChip;
 import 'package:prism_ui/ui.dart';
 
 import '../providers/playback_providers.dart';
+import '../providers/radio_providers.dart';
 import '../providers/songs_shuffle_providers.dart';
 import '../widgets/mood_chip_row.dart';
 
@@ -12,11 +14,104 @@ import '../widgets/mood_chip_row.dart';
 /// Middle: multi-select mood chip row + tempo dropdown.
 /// Bottom: live deck list. Tap a row to play from there; the rest of
 /// the visible deck loads as the queue tail.
-class SongsShuffleTab extends ConsumerWidget {
+class SongsShuffleTab extends ConsumerStatefulWidget {
   const SongsShuffleTab({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SongsShuffleTab> createState() => _SongsShuffleTabState();
+}
+
+class _SongsShuffleTabState extends ConsumerState<SongsShuffleTab> {
+  /// Threshold below which Infinite triggers a radio start. Matches
+  /// spec §2.3 ("when ~10 tracks remain").
+  static const int _lookaheadThreshold = 10;
+
+  /// Set once we've fired startFromTrack so a flapping queue depth
+  /// doesn't spam the notifier. Reset when Infinite toggles off, so
+  /// re-enabling triggers a fresh start.
+  bool _radioRequested = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Defer until after the first frame so ref.listenManual can attach.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.listenManual<QueueSnapshot>(queueProvider, (prev, next) {
+        final state = ref.read(songsShuffleStateProvider);
+        if (!state.infinite) {
+          _radioRequested = false; // toggle off resets the latch
+          return;
+        }
+        final session = ref.read(radioSessionProvider);
+        if (session != null) return; // already running
+        final remaining = (next.current == null ? 0 : 1) +
+            next.playNext.length +
+            next.upcoming.length;
+        if (remaining > _lookaheadThreshold) {
+          _radioRequested = false;
+          return;
+        }
+        if (_radioRequested) return;
+        // Find the most-recently-played track; prefer current, else
+        // the last in history.
+        final seed = next.current ??
+            (next.history.isEmpty ? null : next.history.last);
+        if (seed == null) return;
+        _radioRequested = true;
+        // Show a one-shot toast on first activation per session
+        // (spec §7 risk 4). _radioRequested already implements the
+        // one-shot semantic — the toast fires once per re-entry into
+        // the >threshold → ≤threshold transition.
+        final messenger = ScaffoldMessenger.maybeOf(context);
+        messenger?.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Infinite radio on — pulling more after this deck.',
+            ),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        // ignore: discarded_futures
+        ref.read(radioSessionProvider.notifier).startFromTrack(seed).then((_) {
+          // Pre-load the chip selection as initial steering.
+          final chips = state.chips;
+          for (final chip in chips) {
+            final steerChip = _toSteerChip(chip);
+            if (steerChip == null) continue;
+            // ignore: discarded_futures
+            ref
+                .read(radioSessionProvider.notifier)
+                .toggleChip(steerChip);
+          }
+        });
+      });
+    });
+  }
+
+  /// Best-effort mapping from MoodChip → SteerChip for the radio
+  /// hand-off (spec §2.3 row 2 "currently-selected MoodChip set" as
+  /// initial steering vector). Maps the four chips that have a slice-5
+  /// equivalent; Focus has no exact SteerChip cousin — we leave it
+  /// unmapped, matching spec §2.3's "session captures the current
+  /// multi-select set as its initial steering vector" via the
+  /// chip-expression helper for chips that translate.
+  static SteerChip? _toSteerChip(MoodChip chip) {
+    switch (chip) {
+      case MoodChip.happy:
+        return SteerChip.happier;
+      case MoodChip.sad:
+        return SteerChip.sadder;
+      case MoodChip.chill:
+        return SteerChip.calmer;
+      case MoodChip.energetic:
+        return SteerChip.moreIntense;
+      case MoodChip.focus:
+        return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.extension<SpaceTokens>()!;
     final scale = theme.extension<TypographyScale>()!;
