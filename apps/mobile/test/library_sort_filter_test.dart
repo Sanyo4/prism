@@ -20,6 +20,9 @@ void main() {
       const AlbumView(id: 'a∷Alpha', title: 'Alpha', artist: 'A', year: 2010, tracks: []),
       const AlbumView(id: 'a∷Zeta', title: 'Zeta', artist: 'A', year: 2024, tracks: []),
     ];
+    tester.view.physicalSize = const Size(500, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -65,6 +68,9 @@ void main() {
       const AlbumView(id: 'a∷RA', title: 'RA', artist: 'A', tracks: [rockTrack]),
       const AlbumView(id: 'a∷JA', title: 'JA', artist: 'A', tracks: [jazzTrack]),
     ];
+    tester.view.physicalSize = const Size(500, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -96,6 +102,9 @@ void main() {
     final albums = <AlbumView>[
       const AlbumView(id: 'a∷RA', title: 'RA', artist: 'A', tracks: []),
     ];
+    tester.view.physicalSize = const Size(500, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
