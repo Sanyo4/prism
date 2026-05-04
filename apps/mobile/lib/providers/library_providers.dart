@@ -66,7 +66,7 @@ bool _scanInFlight = false;
 /// 2. Delete rows for paths no longer on the filesystem.
 /// 3. Re-read the cache so the returned list is consistent with what
 ///    was persisted.
-Future<List<Track>> _reconcileAndRead(
+Future<void> _reconcile(
   CacheDb db,
   List<Track> live,
 ) async {
@@ -85,8 +85,6 @@ Future<List<Track>> _reconcileAndRead(
   }
 
   await db.tracksCache.deletePathsNotIn(livePaths);
-
-  return db.tracksCache.readAll();
 }
 
 /// Tracks discovered by walking [libraryRootProvider].
@@ -142,7 +140,7 @@ final tracksProvider = FutureProvider<List<Track>>((ref) async {
     () async {
       try {
         final live = await scanInIsolate(root);
-        await _reconcileAndRead(db, live);
+        await _reconcile(db, live);
         // Invalidate so consumers rebuild with the fresh cache data.
         ref.invalidateSelf();
       } catch (_) {

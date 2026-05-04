@@ -11,7 +11,6 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' as ffi;
 
 import '../backfill/backfill_queue.dart';
-import '../backfill/track_patch.dart';
 import '../browse/album_view.dart';
 import '../browse/artist_view.dart';
 import '../browse/genre_view.dart';
@@ -184,34 +183,6 @@ final _debouncedPatchesProvider =
 
   return controller.stream;
 });
-
-/// Streams BackfillQueue patches into a `Map<String, TrackMetadataPatch>`
-/// keyed by path. Slice 2's merge model is "last patch wins" — the
-/// repository never emits a contradicting patch for the same path
-/// because re-runs are gated on `track_meta.patched_at == 0`.
-final trackPatchProvider =
-    NotifierProvider<TrackPatchNotifier, Map<String, TrackMetadataPatch>>(
-  TrackPatchNotifier.new,
-);
-
-class TrackPatchNotifier
-    extends Notifier<Map<String, TrackMetadataPatch>> {
-  StreamSubscription<TrackPatch>? _sub;
-
-  @override
-  Map<String, TrackMetadataPatch> build() {
-    final queue = ref.watch(backfillQueueProvider);
-    if (queue != null) {
-      _sub?.cancel();
-      _sub = queue.stream.listen((p) {
-        // Riverpod 3 requires a new map identity to trigger watchers.
-        state = {...state, p.path: p.patch};
-      });
-      ref.onDispose(() => _sub?.cancel());
-    }
-    return const <String, TrackMetadataPatch>{};
-  }
-}
 
 /// `tracksProvider` + debounced patches merged into one map keyed by path.
 /// Browse providers consume this. The patch merge applies MB-sourced fields

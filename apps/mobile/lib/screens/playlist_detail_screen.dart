@@ -22,7 +22,7 @@ import 'radio_context_sheet.dart';
 /// onTap (load + play) and onLongPress (RadioContextSheet TrackSeed) as
 /// AlbumDetailScreen. Tracks whose path is not in the live library are
 /// silently skipped (files may go missing without invalidating the record).
-class PlaylistDetailScreen extends ConsumerWidget {
+class PlaylistDetailScreen extends ConsumerStatefulWidget {
   const PlaylistDetailScreen({super.key, required this.playlistId});
   final int playlistId;
 
@@ -30,16 +30,32 @@ class PlaylistDetailScreen extends ConsumerWidget {
       MaterialPageRoute(builder: (_) => PlaylistDetailScreen(playlistId: id));
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PlaylistDetailScreen> createState() =>
+      _PlaylistDetailScreenState();
+}
+
+class _PlaylistDetailScreenState extends ConsumerState<PlaylistDetailScreen> {
+  late final Future<PlaylistRecord?> _future = _load();
+
+  Future<PlaylistRecord?> _load() async {
+    final db = await ref.read(cacheDbProvider.future);
+    return db.playlists.getById(widget.playlistId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return FutureBuilder<PlaylistRecord?>(
-      future: () async {
-        final db = await ref.read(cacheDbProvider.future);
-        return db.playlists.getById(playlistId);
-      }(),
+      future: _future,
       builder: (context, snap) {
-        if (!snap.hasData) {
+        if (snap.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snap.hasError) {
+          return Scaffold(
+            appBar: AppBar(),
+            body: Center(child: Text('Could not load playlist: ${snap.error}')),
           );
         }
         final playlist = snap.data;
