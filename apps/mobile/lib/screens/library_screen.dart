@@ -15,21 +15,19 @@ import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
 import 'songs_shuffle_tab.dart';
 
-/// 6-tab Library surface. Slice 4 adds **Vibe** as a sixth tab —
-/// classifier-native chips + tempo band, backed by the sidecar cache.
+/// 4-tab Library surface — Albums / Artists / Playlists / Songs.
+/// Tab order is locked; the wireframe (`mobile-browse.jsx`) shows the
+/// same four labels in the same order.
 ///
-/// Tabs (left → right):
-/// - Albums: 2-col grid of [AlbumTile]
-/// - Artists: 2-col grid of [ArtistTile]
-/// - Playlists: empty-state card ("Coming in slice 6")
-/// - Songs: slice 1's flat tracks list, extracted into `SongsTab`
-/// - Random: [RandomTab]
-/// - Vibe: [VibeBrowseScreen] (slice 4)
-///
-/// The slice-4 plan §8 step 13 originally said "section above
-/// Albums/Artists/Genres", but slice 2 already shipped tabs; we
-/// reconcile by appending a sixth tab rather than restructuring the
-/// surface.
+/// Per-tab affordances:
+/// - Albums: 2-col grid (default) or 1-col list — toggled by the
+///   header's view button. Sort + genre filter via the filter sheet.
+/// - Artists: 3-col avatar grid (default) or 1-col list. Same
+///   filter-sheet sort + genre filter.
+/// - Playlists: rendered slice-6 sheet content; sort by Created
+///   (newest, default) or Name.
+/// - Songs: SongsShuffleTab — the iPod-shuffle surface (multi-select
+///   MoodChipRow + tempo dropdown + True-Shuffle/Infinite toggles).
 class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
 
