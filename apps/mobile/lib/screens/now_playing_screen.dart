@@ -6,6 +6,7 @@ import 'package:prism_ui/ui.dart';
 
 import '../providers/cast_providers.dart';
 import '../providers/playback_providers.dart';
+import '../providers/radio_providers.dart';
 import '../theme/palette_providers.dart';
 import '../widgets/cast_sheet.dart';
 import '../widgets/embedded_art.dart';
@@ -319,13 +320,9 @@ class _PlayerView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Slice 5: RADIO badge above title; SizedBox.shrink when no
-          // radio session is running.
-          const Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: RadioBadge(),
-          ),
-          SizedBox(height: tokens.s2),
+          // Slice 10 §2.3 — _RadioRegion drops the row from the tree when
+          // no session is active; no zero-height stub consumes Align space.
+          const _RadioRegion(child: RadioBadge()),
           // Big square album art with embedded-FLAC-art fallback. Sits
           // inside an AspectRatio so it tracks the available width and
           // never overflows on narrow phones / split-screen.
@@ -383,9 +380,8 @@ class _PlayerView extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          // Slice 5: SteerChipBar above the scrubber. SizedBox.shrink
-          // when no radio session.
-          const SteerChipBar(),
+          // Slice 10 §2.3 — parent-layout guard; true drop when no session.
+          const _RadioRegion(child: SteerChipBar()),
           // Scrubber: min=0, max=duration seconds. Slice 7 — tints the
           // active track segment and thumb with the album dominant.
           SliderTheme(
@@ -629,5 +625,19 @@ class _ArtPlaceholder extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Slice 10 §2.3 — wraps RadioBadge / SteerChipBar so the *parent* layout
+/// short-circuits on no-session. Avoids the `SizedBox.shrink` zero-height
+/// stub that still consumed Align / spacing rows.
+class _RadioRegion extends ConsumerWidget {
+  const _RadioRegion({required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isOn = ref.watch(radioModeProvider);
+    if (!isOn) return const SizedBox.shrink();
+    return child;
   }
 }

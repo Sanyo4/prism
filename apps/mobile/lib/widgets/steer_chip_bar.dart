@@ -52,42 +52,52 @@ class SteerChipBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(radioSessionProvider);
     if (session == null) return const SizedBox.shrink();
-    final tokens = Theme.of(context).extension<SpaceTokens>()!;
+    final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
     final activeChips = session.chips;
     final activeKey = _activeChipsKey(activeChips);
+    final palette = theme.extension<AlbumPalette>();
+    final tint = palette?.isNeutral == false ? palette!.dominant : null;
 
-    return SizedBox(
-      height: 48,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        // Slide + fade default — matches slice 5 §4 "ships the default
-        // 250 ms fade+slide; slice 7 polishes."
-        child: ListView.separated(
-          key: ValueKey<int>(activeKey),
-          scrollDirection: Axis.horizontal,
-          padding: EdgeInsets.symmetric(horizontal: tokens.s4, vertical: tokens.s1 + 2),
-          itemCount: visualOrder.length,
-          separatorBuilder: (_, _) => SizedBox(width: tokens.s2),
-          itemBuilder: (context, i) {
-            final chip = visualOrder[i];
-            final state = activeChips[chip];
-            final isActive = state?.isActive ?? false;
-            // Linear weight fade — at fresh-toggle (10 ticks) the chip
-            // renders fully opaque; as ticks decay the chip's avatar
-            // glyph fades but the pill remains tappable.
-            final weight = state?.weight ?? 0.0;
-            return FilterChip(
-              selected: isActive,
-              label: Text(_label(chip)),
-              avatar: Opacity(
-                opacity: 0.4 + 0.6 * weight,
-                child: Icon(_iconFor(chip), size: 18),
-              ),
-              onSelected: (_) =>
-                  // ignore: discarded_futures
-                  ref.read(radioSessionProvider.notifier).toggleChip(chip),
-            );
-          },
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: tokens.s4),
+      child: Glass(
+        intensity: GlassIntensity.light,
+        radius: 24,
+        tint: tint,
+        padding: EdgeInsets.symmetric(vertical: tokens.s1),
+        child: SizedBox(
+          height: 44,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: ListView.separated(
+              key: ValueKey<int>(activeKey),
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: tokens.s2, vertical: tokens.s1 + 2),
+              itemCount: visualOrder.length,
+              separatorBuilder: (_, _) => SizedBox(width: tokens.s2),
+              itemBuilder: (context, i) {
+                final chip = visualOrder[i];
+                final state = activeChips[chip];
+                final isActive = state?.isActive ?? false;
+                // Linear weight fade — at fresh-toggle (10 ticks) the chip
+                // renders fully opaque; as ticks decay the chip's avatar
+                // glyph fades but the pill remains tappable.
+                final weight = state?.weight ?? 0.0;
+                return FilterChip(
+                  selected: isActive,
+                  label: Text(_label(chip)),
+                  avatar: Opacity(
+                    opacity: 0.4 + 0.6 * weight,
+                    child: Icon(_iconFor(chip), size: 18),
+                  ),
+                  onSelected: (_) =>
+                      // ignore: discarded_futures
+                      ref.read(radioSessionProvider.notifier).toggleChip(chip),
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
