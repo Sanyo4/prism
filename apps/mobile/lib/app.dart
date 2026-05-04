@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_playback/playback.dart' show QueueSnapshot, queueProvider;
 
 import 'providers/ai_compose_playback_providers.dart';
+import 'providers/ingest_providers.dart';
 import 'screens/ai_tab.dart';
 import 'screens/home_screen.dart';
 import 'screens/library_screen.dart';
@@ -43,6 +44,15 @@ class _PrismAppState extends ConsumerState<PrismApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Boot-time live-tracks ingest (Bug fix — slice-10b §D3 follow-up).
+    // Mounting bootIngestProvider here fires IngestController.rescan()
+    // exactly once per session as soon as cache.db resolves. Without
+    // this, PlaylistEngine throws "library has zero ready tracks" on
+    // fresh installs (the live `tracks` table was only populated by the
+    // Settings → "Re-scan library" button). The work is microtasked
+    // off the UI thread; failures are swallowed inside the provider.
+    ref.watch(bootIngestProvider);
+
     // End-of-queue observer (slice 10 §2.3): when the queue drains AND
     // an AI Compose playback is registered AND the last-known current
     // was in that playlist, surface EndOfPlaylistSheet and clear the

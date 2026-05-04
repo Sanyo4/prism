@@ -96,6 +96,44 @@ final ingestControllerProvider =
   IngestController.new,
 );
 
+/// Side-effect-only provider — kicks off [IngestController.rescan] once
+/// per session as soon as [cacheDbProvider] has resolved. Mounted in
+/// `_PrismAppState.build` via `ref.watch(bootIngestProvider)`.
+///
+/// **Why this exists:** slice-10b D3 wired `tracksProvider` to populate
+/// the `tracks_cache` (warm read on cold start), but the live `tracks`
+/// table — the one PlaylistEngine needs — is only populated by
+/// [IngestCoordinator.run], which prior to this fix was reachable only
+/// from the Settings → "Re-scan library" button. On a fresh install the
+/// live table stayed empty until the user manually rescanned, causing
+/// `Bad state: PlaylistEngine.generate: library has zero ready tracks`.
+///
+/// **Idempotency:** [IngestCoordinator.run] upserts; rerunning it on an
+/// already-ingested library doesn't corrupt or duplicate rows.
+/// [IngestController.rescan] additionally short-circuits via its
+/// `state.running` guard, so a manual Settings-tap landing while the
+/// boot rescan is still streaming coalesces into a no-op rather than
+/// racing the writer transaction.
+///
+/// **Non-blocking:** the work runs inside `Future<void>.microtask` so
+/// the first paint isn't held back. Errors are swallowed (already
+/// surfaced through `state.error` on the controller) and the widget
+/// tests that pump `PrismApp` without mocking `cacheDbProvider`
+/// (path_provider unavailable) don't fail on the unhandled future.
+final bootIngestProvider = Provider<void>((ref) {
+  // ignore: discarded_futures — fire-and-forget background task.
+  Future<void>.microtask(() async {
+    try {
+      await ref.read(cacheDbProvider.future);
+      await ref.read(ingestControllerProvider.notifier).rescan();
+    } catch (_) {
+      // Swallow: cache.db open failures or scanner errors are already
+      // surfaced via tracksProvider's fallback path and the controller's
+      // `state.error`. Boot ingest must never crash the app tree.
+    }
+  });
+});
+
 /// Mood-row results, parameterised by chip. The provider re-reads on
 /// every cache invalidation (Re-scan completes, etc.).
 final moodResultsProvider =
