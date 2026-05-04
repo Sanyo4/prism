@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:prism_ui/ui.dart';
 
 import '../settings/cast_section.dart';
 import '../theme/settings_theme_section.dart';
@@ -27,40 +28,44 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
-      body: ListView(
-        children: [
-          const SettingsOnlineMetadataSection(),
-          const SettingsLibrarySection(),
-          // Slice 6 / Slice 8 — LLM section appended below the
-          // slice-4 Library row. Section order stays stable so the
-          // slice-1 widget test (which scrolls until "Playback" is
-          // visible) still resolves past this section. Slice 8 swaps
-          // the Ollama-backed `SettingsLlmSection` for the Cactus-
-          // backed `SettingsLlmSectionMobile` on Android only;
-          // Linux desktop keeps the Ollama section so slice 6's
-          // verification still passes.
-          if (Platform.isAndroid)
-            const SettingsLlmSectionMobile()
-          else
-            const SettingsLlmSection(),
-          // Slice 7 — Theme preset picker. Sits above Playback so the
-          // existing widget test (which scrolls "Playback" into view)
-          // still resolves; we deliberately don't reorder slice 1's
-          // anchor section.
-          const SettingsThemeSection(),
-          // Slice 9 — Cast & DLNA. Sits between Theme and Playback so
-          // the slice-1 widget-test scroll-until-"Playback" still
-          // resolves (the section adds rows above, not below, the
-          // anchor).
-          const CastSection(),
-          const SettingsSectionHeader(title: 'Playback'),
-          const SettingsSectionPlaceholder(
-            subtitle:
-                'ReplayGain toggle and gapless defaults — wired in a later slice.',
-          ),
-        ],
+    return AuroraBackground(
+      variant: AuroraVariant.library,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(title: const Text('Settings')),
+        body: ListView(
+          children: [
+            const SettingsOnlineMetadataSection(),
+            const SettingsLibrarySection(),
+            // Slice 6 / Slice 8 — LLM section appended below the
+            // slice-4 Library row. Section order stays stable so the
+            // slice-1 widget test (which scrolls until "Playback" is
+            // visible) still resolves past this section. Slice 8 swaps
+            // the Ollama-backed `SettingsLlmSection` for the Cactus-
+            // backed `SettingsLlmSectionMobile` on Android only;
+            // Linux desktop keeps the Ollama section so slice 6's
+            // verification still passes.
+            if (Platform.isAndroid)
+              const SettingsLlmSectionMobile()
+            else
+              const SettingsLlmSection(),
+            // Slice 7 — Theme preset picker. Sits above Playback so the
+            // existing widget test (which scrolls "Playback" into view)
+            // still resolves; we deliberately don't reorder slice 1's
+            // anchor section.
+            const SettingsThemeSection(),
+            // Slice 9 — Cast & DLNA. Sits between Theme and Playback so
+            // the slice-1 widget-test scroll-until-"Playback" still
+            // resolves (the section adds rows above, not below, the
+            // anchor).
+            const CastSection(),
+            const SettingsSectionHeader(title: 'Playback'),
+            const SettingsSectionPlaceholder(
+              subtitle:
+                  'ReplayGain toggle and gapless defaults — wired in a later slice.',
+            ),
+          ],
+        ),
       ),
     );
   }

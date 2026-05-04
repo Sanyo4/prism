@@ -20,14 +20,18 @@ class MoodResultsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final results = ref.watch(moodResultsProvider(chip));
-    return Scaffold(
-      appBar: AppBar(title: Text(_titleFor(chip))),
-      body: results.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Mood query failed: $e')),
-        data: (rows) => rows.isEmpty
-            ? _EmptyState(chip: chip)
-            : _RankedList(chip: chip, rows: rows),
+    return AuroraBackground(
+      variant: AuroraVariant.home,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(title: Text(_titleFor(chip))),
+        body: results.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('Mood query failed: $e')),
+          data: (rows) => rows.isEmpty
+              ? _EmptyState(chip: chip)
+              : _RankedList(chip: chip, rows: rows),
+        ),
       ),
     );
   }

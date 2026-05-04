@@ -88,6 +88,9 @@ class _PrismAppState extends ConsumerState<PrismApp> {
       // to override the AlbumPalette per-album; every other route
       // renders against the neutral palette (slice 7 §2 / §5).
       theme: PrismTheme.light(),
+      // Slice 10b §A3 — lock the app to light theme. Real PrismTheme.dark()
+      // is deferred to slice-12.
+      themeMode: ThemeMode.light,
       initialRoute: AppShell.homeRoute,
       routes: {
         AppShell.homeRoute: (_) => const HomeScreen(),
