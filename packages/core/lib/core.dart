@@ -13,6 +13,7 @@ export 'src/paths/audio_paths.dart';
 export 'src/replay_gain.dart';
 export 'src/scanner/cancellation_token.dart';
 export 'src/scanner/library_scanner.dart';
+export 'src/scanner/library_scanner_isolate.dart';
 export 'src/scanner/scan_event.dart';
 // Slice 4 surface — sidecar models, cache DB, ingest pipeline.
 export 'src/sidecar/mood_vector.dart';

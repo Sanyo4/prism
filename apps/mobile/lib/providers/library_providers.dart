@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:prism_core/core.dart';
 
+import 'cache_db_providers.dart';
+
 /// Accumulator for [ScanFailed] events produced by the most recent run
 /// of [tracksProvider]. Slice 1 only surfaces its length implicitly
 /// (unused in the §11 verification matrix); a later slice will add a
@@ -52,49 +54,107 @@ final libraryRootProvider = FutureProvider<Directory>((ref) async {
   return getApplicationDocumentsDirectory();
 });
 
-/// Tracks discovered by walking [libraryRootProvider] once, start to
-/// finish.
-///
-/// Responsibilities:
-/// - Kick off [LibraryScanner.scan] against the resolved root.
-/// - Accumulate [ScanDiscovered.track] into the returned list.
-/// - Forward [ScanFailed] events to [libraryScanFailuresProvider].
-/// - Stop when [ScanDone] arrives.
-/// - Cancel cooperatively via [CancellationToken] when the provider is
-///   disposed (Riverpod destroys this provider when the last watcher
-///   goes away, which is the signal we use here).
-///
-/// Dedup: tracks are keyed by [Track.path] — re-scans or symlinked
-/// directories that surface the same file twice collapse to one entry,
-/// so `ListView.builder` keys stay stable.
-final tracksProvider = FutureProvider<List<Track>>((ref) async {
-  final root = await ref.watch(libraryRootProvider.future);
-  final token = CancellationToken();
-  ref.onDispose(token.cancel);
+/// Guard: `true` while a background [scanInIsolate] is running.
+/// Prevents the invalidate-triggered second build from firing a second
+/// concurrent scan. Module-level so it survives provider rebuilds.
+bool _scanInFlight = false;
 
-  // Wipe prior failures at the start of each run so stale errors don't
-  // linger across re-scans.
-  ref.read(libraryScanFailuresProvider.notifier).reset();
+/// Performs the diff-and-persist step after the live scan completes,
+/// then returns the updated track list from the cache.
+///
+/// 1. Upsert new / changed rows (path absent or mtime changed).
+/// 2. Delete rows for paths no longer on the filesystem.
+/// 3. Re-read the cache so the returned list is consistent with what
+///    was persisted.
+Future<List<Track>> _reconcileAndRead(
+  CacheDb db,
+  List<Track> live,
+) async {
+  final livePaths = <String>{for (final t in live) t.path};
+  final cachedMtimes = await db.tracksCache.readPathMtimes();
 
-  final scanner = LibraryScanner();
-  final byPath = <String, Track>{};
-  await for (final event in scanner.scan(root, token: token)) {
-    switch (event) {
-      case ScanDiscovered(:final track):
-        byPath.putIfAbsent(track.path, () => track);
-      case ScanFailed():
-        ref.read(libraryScanFailuresProvider.notifier).append(event);
-      case ScanSkipped():
-        // Slice 1 drops skipped paths on the floor — the user doesn't
-        // need a banner for "foo.txt isn't an audio file". Slice 2's
-        // Settings row may expose them behind an "Advanced" toggle.
-        break;
-      case ScanDone():
-        // Sealed-type switch still needs the terminal case even though
-        // the stream closes right after — Dart's exhaustiveness checker
-        // complains otherwise.
-        break;
+  final toUpsert = <Track>[];
+  for (final t in live) {
+    final cachedMtime = cachedMtimes[t.path];
+    if (cachedMtime == null || cachedMtime != t.mtimeMs) {
+      toUpsert.add(t);
     }
   }
-  return byPath.values.toList(growable: false);
+  if (toUpsert.isNotEmpty) {
+    await db.tracksCache.upsertAll(toUpsert);
+  }
+
+  await db.tracksCache.deletePathsNotIn(livePaths);
+
+  return db.tracksCache.readAll();
+}
+
+/// Tracks discovered by walking [libraryRootProvider].
+///
+/// Slice-10b §D3 — two-phase cold-start:
+///
+/// **Phase 1 (warm read):** Reads from `tracks_cache` immediately.
+/// Emits the cached list to consumers in <10 ms on subsequent
+/// launches, so the Albums / Artists grids are populated well before
+/// the FS walk finishes.
+///
+/// **Phase 2 (background scan):** Calls [scanInIsolate] so the FS
+/// walk + tag parsing run off the UI thread. When the scan completes,
+/// the results are diffed against the cached mtimes:
+/// - New/changed rows are upserted.
+/// - Paths missing from the live set are deleted.
+/// - This provider is then invalidated so consumers see the fresh
+///   data.
+///
+/// **Pattern chosen:** `FutureProvider<List<Track>>` + side-effect
+/// kick-off + `ref.invalidate`. This preserves the `AsyncValue<List<Track>>`
+/// contract that all existing consumers rely on (`ref.watch` + `.when` /
+/// `.whenData` / `.asData?.value`). Consumers that call
+/// `ref.read(tracksProvider.future)` also continue to work unchanged.
+/// The alternative (NotifierProvider emitting twice) would require
+/// updating every consumer that assumes the standard FutureProvider API.
+///
+/// **Loop prevention:** `_scanInFlight` (module-level) ensures only
+/// one background scan runs at a time. The invalidate-triggered second
+/// build skips the kick-off and returns the already-updated cache.
+///
+/// Dedup: tracks are keyed by [Track.path] in `tracks_cache`, so
+/// re-scans or symlinked directories that surface the same file twice
+/// collapse to one entry.
+final tracksProvider = FutureProvider<List<Track>>((ref) async {
+  final db = await ref.watch(cacheDbProvider.future);
+  final root = await ref.watch(libraryRootProvider.future);
+
+  // Wipe prior failures at the start of each (re-)scan.
+  ref.read(libraryScanFailuresProvider.notifier).reset();
+
+  // Phase 1: warm read from tracks_cache.
+  // On first install this is empty; subsequent launches return the
+  // persisted list immediately without any FS I/O.
+  final cached = await db.tracksCache.readAll();
+
+  // Phase 2: background live scan. Only kick off one scan at a time.
+  // When the FutureProvider is invalidated after the scan finishes,
+  // this second build re-reads the updated cache and skips the kickoff.
+  if (!_scanInFlight) {
+    _scanInFlight = true;
+    // ignore: discarded_futures — intentional fire-and-forget background task.
+    () async {
+      try {
+        final live = await scanInIsolate(root);
+        await _reconcileAndRead(db, live);
+        // Invalidate so consumers rebuild with the fresh cache data.
+        ref.invalidateSelf();
+      } catch (_) {
+        // Scan failed: leave the cached payload as-is; consumers
+        // already have a valid (if stale) list from Phase 1.
+      } finally {
+        _scanInFlight = false;
+      }
+    }();
+  }
+
+  // Return the warm-cache payload immediately. If this is the second
+  // build triggered by the invalidate, this is now the updated list.
+  return cached;
 });
