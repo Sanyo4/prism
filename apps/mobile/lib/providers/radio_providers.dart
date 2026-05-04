@@ -12,7 +12,8 @@
 /// - [lookaheadManagerProvider] — owned by [radioSessionProvider]'s
 ///   notifier so the manager's lifetime tracks session lifetime.
 /// - [recentSeedsStoreProvider] / [recentSeedsProvider] — persistent
-///   LRU of three seeds shown in `RadioHomeCard`.
+///   LRU of three seeds — slice-10 retired the `RadioHomeCard` surface;
+///   the store stays for slice-5 long-press re-entry semantics.
 /// - [playlistRepoProvider] — wraps `CacheDb` in Track A's
 ///   `PlaylistRepoImpl` (defined in `package:prism_core/core.dart`).
 ///   Async because `cacheDbProvider` is a `FutureProvider`.
@@ -74,8 +75,8 @@ final recentSeedsStoreProvider =
   return RecentSeedsStore(prefs: prefs);
 });
 
-/// Cached snapshot of the recent-seeds list. Watched by `RadioHomeCard`.
-/// Re-emitted whenever [RadioSessionNotifier] persists a new seed.
+/// Cached snapshot of the recent-seeds list. Re-emitted whenever
+/// [RadioSessionNotifier] persists a new seed.
 final recentSeedsProvider =
     NotifierProvider<RecentSeedsNotifier, List<RecentSeedEntry>>(
   RecentSeedsNotifier.new,
@@ -171,8 +172,7 @@ final radioSessionProvider =
 );
 
 /// Derived flag — true while a radio session is running. Widgets that
-/// gate visibility on radio mode (`RadioBadge`, `SteerChipBar`,
-/// `RadioSeedHeader`, `RadioHomeCard`'s active state) read this.
+/// gate visibility on radio mode (`RadioBadge`, `SteerChipBar`) read this.
 final radioModeProvider =
     Provider<bool>((ref) => ref.watch(radioSessionProvider) != null);
 

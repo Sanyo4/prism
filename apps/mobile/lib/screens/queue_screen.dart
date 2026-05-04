@@ -5,7 +5,6 @@ import 'package:prism_ui/ui.dart';
 
 import '../providers/playback_providers.dart';
 import '../shell/app_shell.dart';
-import '../widgets/radio_seed_header.dart';
 
 /// Three-section queue view — History (read-only) / Now Playing /
 /// Up Next (PlayNext, user-queued) / Upcoming (context, collapsible).
@@ -152,10 +151,9 @@ class _QueueSections extends ConsumerWidget {
             ),
           ),
 
-        // ── Slice 5: Radio seed header above Upcoming ────────────
-        // SizedBox.shrink when no radio session — kept inside the
-        // CustomScrollView so the layout doesn't churn on toggle.
-        const SliverToBoxAdapter(child: RadioSeedHeader()),
+        // Slice 10 — RadioSeedHeader retired; radio re-entry now flows
+        // through long-press + the Songs-tab Infinite toggle (spec §7
+        // risk 7). Upcoming header sits directly under PlayNext now.
 
         // ── Upcoming (context — collapsible) ──────────────────────
         SliverToBoxAdapter(

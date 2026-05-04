@@ -1,9 +1,10 @@
 /// Persistent LRU of the last three radio seeds the user started.
 ///
 /// Why three: matches the slice 5 §2 spec (`RecentSeedsStore` keeps at
-/// most three seeds, LRU). The Home `RadioHomeCard` paginates through
-/// these — three is the densest set that still fits one row of the
-/// Pixel 9 Pro Fold portrait without horizontal scrolling.
+/// most three seeds, LRU). The Home `RadioHomeCard`, retired in slice 10,
+/// used to paginate through these — three is the densest set that still
+/// fits one row of the Pixel 9 Pro Fold portrait without horizontal
+/// scrolling. The store remains for slice-5 long-press re-entry semantics.
 ///
 /// Storage: a single JSON-encoded list under one shared-preferences
 /// key. Survives app restart; cleared only on `SharedPreferences.clear()`

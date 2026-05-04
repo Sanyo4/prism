@@ -9,7 +9,7 @@
 ///   in `queue_service_test.dart` still pass unchanged.
 /// - `radioMode == true` → callers may use [QueueService.appendForRadio]
 ///   to grow Upcoming without touching PlayNext head; and the UI shows
-///   the "RADIO" badge / `SteerChipBar` / `RadioSeedHeader`.
+///   the "RADIO" badge / `SteerChipBar`.
 ///
 /// The flag does **not** alter `advance` / `retreat` / `move` /
 /// `removeAt` semantics. Slice-5's `LookaheadManager` rides on top of
