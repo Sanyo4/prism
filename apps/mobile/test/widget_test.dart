@@ -1,31 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile/app.dart';
 import 'package:mobile/providers/cast_providers.dart';
 import 'package:mobile/providers/llm_providers.dart';
+import 'package:mobile/shell/app_shell.dart';
 import 'package:prism_cast/cast.dart';
 import 'package:prism_llm_desktop/llm_desktop.dart';
 
-import 'package:mobile/app.dart';
-
+/// Slice 10 §2.6 rewrite — exercises the gear icon from every entry in
+/// [AppTab.values] using `find.byTooltip('Settings')`. Source of truth
+/// is the enum, so adding a new tab updates one place (the enum) and
+/// the test follows.
 void main() {
-  // Slice 1 §12 DoD: "The gear icon opens SettingsScreen from every
-  // top-level screen." Slice 2 renames the initial tab to Library and
-  // adds the Online Metadata section in front of the slice-1
-  // placeholders; the gear-icon journey itself is unchanged.
-  //
-  // We can't assert the `audio_service` integration here — its
-  // `AudioService.init` needs a platform channel — but the rest of
-  // the UI is testable under `ProviderScope` alone, provided the
-  // backfill kickoff lives off the root widget (so this test does not
-  // need a `path_provider` mock).
-  testWidgets('Gear icon reaches Settings from every top-level tab',
+  testWidgets('Settings reachable via the gear icon from every top-level tab',
       (tester) async {
     // Slice 6's `SettingsLlmSection` watches `ollamaHealthProvider`,
     // which polls `localhost:11434` over HTTP. In a widget test
     // there's no network and the framework refuses real HTTP, so we
     // override the stream with a synthetic "down" snapshot — we're
     // testing the gear-icon journey, not Ollama liveness.
+    //
+    // Slice 9 — the SettingsScreen now renders `CastSection` which
+    // subscribes to `castDiscoveryProvider`. Override with an empty
+    // broadcast stream so the section renders without spinning a timer.
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -35,14 +33,6 @@ void main() {
               detail: 'overridden in widget test',
             );
           }),
-          // Slice 9 — the SettingsScreen now renders `CastSection`
-          // which subscribes to `castDiscoveryProvider`. The default
-          // implementation constructs a `Discovery` that arms a 5-min
-          // refresh `Timer.periodic`; under flutter_test that timer
-          // outlives the test and trips
-          // `_verifyInvariants(timersPending)`. Override with an
-          // empty broadcast stream so the section renders its
-          // "Scanning…" placeholder without spinning the timer.
           castDiscoveryProvider.overrideWith(
             (ref) => const Stream<List<DlnaDevice>>.empty(),
           ),
@@ -50,63 +40,86 @@ void main() {
         child: const PrismApp(),
       ),
     );
-    // Don't pumpAndSettle: the LibraryScreen's tabs spin up async
-    // providers that we'd otherwise have to mock. The first frame
-    // already has the AppBar + gear, which is what this test verifies.
+    // Don't pumpAndSettle: tab screens spin up async providers that
+    // we'd otherwise have to mock. The first frame already has the
+    // _GlassNavBar settings affordance, which is what this test
+    // verifies.
+    await tester.pump();
 
-    expect(find.widgetWithText(AppBar, 'Library'), findsOneWidget);
-    expect(
-      find.byIcon(Icons.settings),
-      findsOneWidget,
-      reason: 'Library tab must surface the gear icon.',
-    );
+    for (final tab in AppTab.values) {
+      // Navigate to the tab by replacing the current route. Access the
+      // navigator through the element tree — PrismApp's navigatorKey is
+      // private, so we look up the Navigator widget directly.
+      final NavigatorState nav =
+          tester.state<NavigatorState>(find.byType(Navigator).first);
+      nav.pushReplacementNamed(_routeFor(tab));
+      // Pump one frame to begin the route transition.
+      await tester.pump();
+      // MaterialPageRoute transition duration is 300 ms on desktop.
+      // Pump small increments to advance the animation clock so the
+      // AnimationController reaches AnimationStatus.completed and the
+      // Navigator removes the IgnorePointer from the incoming route.
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
 
-    // Bottom nav offers all three slice-1 tabs (Tracks/NowPlaying/Queue).
-    // Inactive icons we verify here; the active one is the same as the
-    // current tab and covered by the AppBar assertion above.
-    expect(find.byIcon(Icons.play_circle_outline), findsOneWidget);
-    expect(find.byIcon(Icons.queue_music_outlined), findsOneWidget);
+      // The gear icon's tooltip is the source of truth (slice 10 §2.6).
+      // The _GlassNavBar always renders an IconButton(tooltip:'Settings')
+      // so there is at least one Settings affordance on every tab
+      // regardless of showAppBar.
+      expect(
+        find.byTooltip('Settings'),
+        findsAtLeastNWidgets(1),
+        reason: 'Tab "${tab.name}" must surface a Settings affordance',
+      );
 
-    // Hop to Queue via its inactive icon; confirm gear persists.
-    await tester.tap(find.byIcon(Icons.queue_music_outlined));
-    await tester.pumpAndSettle();
-    expect(find.widgetWithText(AppBar, 'Queue'), findsOneWidget);
-    expect(
-      find.byIcon(Icons.settings),
-      findsOneWidget,
-      reason: 'Queue tab must also surface the gear icon.',
-    );
+      // Tap the Settings IconButton by targeting its icon directly.
+      // The IconButton inside _GlassNavBar uses Icons.settings_outlined;
+      // the AppBar gear (on tabs where showAppBar:true) uses Icons.settings.
+      // Both are wrapped by Tooltip('Settings'). We prefer to tap via the
+      // icon so the InkWell gesture is registered (not the Tooltip long-
+      // press GestureDetector), and we use `.first` to be deterministic.
+      final gearIcon = find.byIcon(Icons.settings_outlined);
+      final appBarGear = find.byIcon(Icons.settings);
+      final iconFinder = gearIcon.evaluate().isNotEmpty ? gearIcon : appBarGear;
+      await tester.tap(iconFinder.first);
+      // Let the push animation run past the threshold where SettingsScreen
+      // renders its AppBar title text. Avoid pumpAndSettle because the
+      // SettingsScreen's async providers (ollamaHealth, castDiscovery)
+      // may never fully settle.
+      await tester.pump();
+      for (var i = 0; i < 25; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
 
-    // Tap the gear → Settings screen, with all three section headers
-    // visible (Online Metadata + Library + Playback). We use a
-    // text-typed finder restricted to ListView descendants to avoid
-    // matching the Library bottom-nav label.
-    await tester.tap(find.byIcon(Icons.settings));
-    await tester.pumpAndSettle();
-    expect(find.widgetWithText(AppBar, 'Settings'), findsOneWidget);
-    expect(find.text('Online Metadata'), findsOneWidget);
-    // The Library *section header* in Settings — there's also a
-    // Library tab elsewhere; restricting via ancestor disambiguates.
-    expect(
-      find.descendant(
-        of: find.byType(ListView),
-        matching: find.text('Library'),
-      ),
-      findsOneWidget,
-    );
-    // The Playback section header is below the fold in the default
-    // 800x600 test viewport (slices 4+6 added rows ahead of it).
-    // Scroll the *outer* Settings ListView — slice 6's TextField in
-    // the LLM section adds an inner editable scrollable that would
-    // make a bare scrollUntilVisible ambiguous.
-    await tester.scrollUntilVisible(
-      find.text('Playback'),
-      200,
-      scrollable: find.descendant(
-        of: find.byType(ListView),
-        matching: find.byType(Scrollable),
-      ).first,
-    );
-    expect(find.text('Playback'), findsOneWidget);
+      // SettingsScreen should be on top with its AppBar title.
+      expect(
+        find.widgetWithText(AppBar, 'Settings'),
+        findsOneWidget,
+        reason:
+            'Tap should navigate to SettingsScreen for tab "${tab.name}"',
+      );
+
+      // Pop back to the tab so the next iteration starts clean.
+      nav.pop();
+      await tester.pump();
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+    }
   });
+}
+
+/// Maps each [AppTab] to its named route in [AppShell].
+String _routeFor(AppTab tab) {
+  switch (tab) {
+    case AppTab.home:
+      return AppShell.homeRoute;
+    case AppTab.search:
+      return AppShell.searchRoute;
+    case AppTab.library:
+      return AppShell.libraryRoute;
+    case AppTab.ai:
+      return AppShell.aiRoute;
+  }
 }

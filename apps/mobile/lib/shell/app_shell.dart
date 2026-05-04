@@ -235,6 +235,20 @@ class _GlassNavBar extends StatelessWidget {
                 onTap: () => onTap(it.tab),
               ),
             ),
+          // Settings affordance — always present in the nav bar so
+          // `find.byTooltip('Settings')` resolves from every tab
+          // regardless of the per-screen showAppBar setting.
+          // Slice 10 §2.6 relies on this for the gear-icon walk.
+          IconButton(
+            tooltip: 'Settings',
+            icon: Icon(
+              Icons.settings_outlined,
+              size: 20,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+            ),
+            onPressed: () =>
+                Navigator.of(context).push(SettingsScreen.route()),
+          ),
         ],
       ),
     );
