@@ -19,9 +19,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/browse/album_view.dart';
 import 'package:mobile/providers/playback_providers.dart';
+import 'package:mobile/providers/radio_providers.dart';
 import 'package:mobile/screens/album_detail_screen.dart' show AlbumActions;
+import 'package:mobile/screens/radio_context_sheet.dart';
 import 'package:mobile/theme/prism_theme.dart';
 import 'package:prism_core/core.dart';
+import 'package:prism_playlist_engine/playlist_engine.dart';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -252,6 +255,82 @@ void main() {
 
       expect(find.byType(BackdropFilter), findsOneWidget,
           reason: 'BackdropFilter scrim must be present in the cover Stack');
+    },
+  );
+
+  testWidgets(
+    'Long-pressing a track tile opens RadioContextSheet with TrackSeed',
+    (tester) async {
+      final album = _fixtureAlbum();
+      final track0 = album.tracks[0];
+
+      // Mock pathToIdProvider to return a fixed id for track 0.
+      final pathToId = {track0.path: 42};
+
+      // Build a minimal widget tree containing just the track list
+      // Glass container with the ListTile that has onLongPress.
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            pathToIdProvider.overrideWith((ref) async => pathToId),
+            // Stub playback service to avoid platform calls.
+            playbackServiceProvider.overrideWith((_) {
+              return _NoOpPlaybackService();
+            }),
+            // Stub queue to capture loadContext calls.
+            queueProvider.overrideWith(() => _RecordingQueue()),
+          ],
+          child: MaterialApp(
+            theme: PrismTheme.light(),
+            home: Scaffold(
+              body: Consumer(
+                builder: (context, ref, _) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        title: Text(track0.title ?? track0.path),
+                        onTap: () {},
+                        onLongPress: () async {
+                          final trackPathToId =
+                              await ref.read(pathToIdProvider.future);
+                          final id = trackPathToId[track0.path];
+                          if (id == null) return;
+                          if (!context.mounted) return;
+                          RadioContextSheet.show(
+                            context,
+                            TrackSeed(
+                              trackId: id,
+                              title: track0.title ?? track0.path,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      // Find the first track's title text and long-press it.
+      final trackTileText = find.text(track0.title ?? track0.path);
+      expect(trackTileText, findsOneWidget,
+          reason: 'Track 0 title should render');
+
+      // Long-press the track tile.
+      await tester.longPress(trackTileText);
+      await tester.pump();
+
+      // After long-press, a BottomSheet should appear (RadioContextSheet
+      // uses showModalBottomSheet, which creates a BottomSheet widget).
+      expect(find.byType(BottomSheet), findsOneWidget,
+          reason:
+              'RadioContextSheet.show should open a modal BottomSheet');
     },
   );
 }

@@ -11,6 +11,7 @@ import 'package:prism_ui/ui.dart';
 import '../browse/album_view.dart';
 import '../providers/metadata_providers.dart';
 import '../providers/playback_providers.dart';
+import '../providers/radio_providers.dart';
 import '../theme/palette_providers.dart';
 import '../widgets/embedded_art.dart';
 import '../widgets/prism_art_cache_manager.dart';
@@ -263,6 +264,21 @@ class _AlbumDetailBody extends ConsumerWidget {
                               ),
                             ),
                             onTap: () => _playFrom(ref, ordered, i),
+                            onLongPress: () async {
+                              final pathToId =
+                                  await ref.read(pathToIdProvider.future);
+                              final id = pathToId[ordered[i].path];
+                              if (id == null) return;
+                              if (!context.mounted) return;
+                              RadioContextSheet.show(
+                                context,
+                                TrackSeed(
+                                  trackId: id,
+                                  title: ordered[i].title ??
+                                      _basename(ordered[i].path),
+                                ),
+                              );
+                            },
                           ),
                       ],
                     ),
