@@ -1,5 +1,6 @@
 import 'package:prism_core/core.dart';
 
+import '../providers/library_view_prefs.dart';
 import 'album_view.dart';
 
 /// Stable, derived projection of one artist surface.
@@ -107,3 +108,59 @@ List<ArtistView> indexArtists(
 }
 
 String _artistIdFor(String name) => name.trim().toLowerCase();
+
+/// Spec §2.5 sort helpers for ArtistView. Same null-tag-falls-to-end
+/// semantics as albums.
+List<ArtistView> sortArtists(List<ArtistView> artists, ArtistSort sort) {
+  final out = List<ArtistView>.from(artists);
+  switch (sort) {
+    case ArtistSort.name:
+      out.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    case ArtistSort.albumCountDesc:
+      out.sort((a, b) {
+        final c = b.albumCount.compareTo(a.albumCount);
+        if (c != 0) return c;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+    case ArtistSort.recentlyAdded:
+      out.sort((a, b) {
+        final ra = _maxArtistMtime(a);
+        final rb = _maxArtistMtime(b);
+        if (ra == null && rb == null) {
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        }
+        if (ra == null) return 1;
+        if (rb == null) return -1;
+        final c = rb.compareTo(ra);
+        if (c != 0) return c;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+  }
+  return out;
+}
+
+int? _maxArtistMtime(ArtistView a) {
+  int? best;
+  for (final al in a.albums) {
+    for (final t in al.tracks) {
+      if (best == null || t.mtimeMs > best) best = t.mtimeMs;
+    }
+  }
+  return best;
+}
+
+/// Artist genre filter. Artist passes when ANY track on ANY of their
+/// albums matches a selected genre key.
+List<ArtistView> filterArtistsByGenre(
+  List<ArtistView> artists,
+  List<String> selectedKeys,
+) {
+  if (selectedKeys.isEmpty) return artists;
+  final keys = selectedKeys.toSet();
+  return [
+    for (final a in artists)
+      if (a.albums.any((al) =>
+          al.tracks.any((t) => t.genre != null && keys.contains(t.genre))))
+        a,
+  ];
+}

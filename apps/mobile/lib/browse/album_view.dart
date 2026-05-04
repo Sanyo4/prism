@@ -1,5 +1,7 @@
 import 'package:prism_core/core.dart';
 
+import '../providers/library_view_prefs.dart';
+
 /// Stable, derived projection of one album.
 ///
 /// Identity ([id]) is `${albumArtist ?? artist}∷${album}` — the U+2237
@@ -227,4 +229,80 @@ String _normalizeArtist(String input) {
     '',
   );
   return stripped.trim();
+}
+
+/// Spec §2.5 — secondary sort always falls back to title (case-
+/// insensitive) so equal primary keys produce stable ordering.
+/// Null-tag rows fall to the END regardless of direction.
+List<AlbumView> sortAlbums(List<AlbumView> albums, AlbumSort sort) {
+  final out = List<AlbumView>.from(albums);
+  switch (sort) {
+    case AlbumSort.title:
+      out.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    case AlbumSort.artist:
+      out.sort((a, b) {
+        final c = a.artist.toLowerCase().compareTo(b.artist.toLowerCase());
+        if (c != 0) return c;
+        return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+      });
+    case AlbumSort.yearNewest:
+      out.sort(_byYear(newestFirst: true));
+    case AlbumSort.yearOldest:
+      out.sort(_byYear(newestFirst: false));
+    case AlbumSort.recentlyAdded:
+      out.sort((a, b) {
+        final ra = _maxAddedAtMs(a);
+        final rb = _maxAddedAtMs(b);
+        if (ra == null && rb == null) {
+          return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+        }
+        if (ra == null) return 1;
+        if (rb == null) return -1;
+        final c = rb.compareTo(ra);
+        if (c != 0) return c;
+        return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+      });
+  }
+  return out;
+}
+
+int Function(AlbumView, AlbumView) _byYear({required bool newestFirst}) {
+  return (a, b) {
+    final ya = a.year;
+    final yb = b.year;
+    if (ya == null && yb == null) {
+      return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+    }
+    if (ya == null) return 1;
+    if (yb == null) return -1;
+    final c = newestFirst ? yb.compareTo(ya) : ya.compareTo(yb);
+    if (c != 0) return c;
+    return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+  };
+}
+
+int? _maxAddedAtMs(AlbumView a) {
+  // mtimeMs serves as a proxy for "added at"; AlbumView holds the raw
+  // tracks, so we pick the most recent.
+  int? best;
+  for (final t in a.tracks) {
+    if (best == null || t.mtimeMs > best) best = t.mtimeMs;
+  }
+  return best;
+}
+
+/// Spec §2.5 — OR-of-genres aggregate filter. An album passes when at
+/// least one of its tracks tags a genre in [selectedKeys] (raw storage
+/// strings — they're the actual tag values stored on disk).
+List<AlbumView> filterAlbumsByGenre(
+  List<AlbumView> albums,
+  List<String> selectedKeys,
+) {
+  if (selectedKeys.isEmpty) return albums;
+  final keys = selectedKeys.toSet();
+  return [
+    for (final a in albums)
+      if (a.tracks.any((t) => t.genre != null && keys.contains(t.genre)))
+        a,
+  ];
 }
