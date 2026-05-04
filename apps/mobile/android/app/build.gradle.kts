@@ -8,7 +8,10 @@ plugins {
 android {
     namespace = "dev.prism.mobile"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // Pinned to the NDK used to compile the 16 KB-page-aligned vec0.so prebuilts
+    // (slice-10b). NDK r27+ is required for lld's -Wl,-z,max-page-size=16384
+    // support; r28 is used here so the toolchain matches the committed binaries.
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -28,6 +31,17 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    packaging {
+        jniLibs {
+            // Android 15+ with 16 KB page kernels (Pixel 9 series, Tensor G4+)
+            // requires native libs to be uncompressed in the APK/AAB so the OS
+            // can mmap them directly. Compressed libs cannot be page-aligned at
+            // load time, causing dlopen failures even on correctly-aligned .so
+            // files. This setting has no effect on older devices.
+            useLegacyPackaging = false
+        }
     }
 
     buildTypes {
