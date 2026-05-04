@@ -7,6 +7,7 @@ import '../providers/playback_providers.dart';
 import '../shell/app_shell.dart';
 import '../widgets/album_tile.dart';
 import '../widgets/artist_tile.dart';
+import '../widgets/discover_grids.dart';
 import '../widgets/embedded_art.dart';
 import '../widgets/mood_chip_row.dart';
 import 'ai_tab.dart';
@@ -63,6 +64,12 @@ class HomeScreen extends ConsumerWidget {
             SizedBox(height: tokens.s4),
             // Featured row (horizontally scrolling album cards).
             const _FeaturedRow(),
+            SizedBox(height: tokens.s4),
+            // Discover albums grid (2×3 with independent refresh).
+            const DiscoverAlbumsGrid(),
+            SizedBox(height: tokens.s4),
+            // Discover artists grid (2×3 with independent refresh).
+            const DiscoverArtistsGrid(),
             SizedBox(height: tokens.s4),
             // Artists strip (horizontally scrolling avatars).
             const _ArtistsRow(),

@@ -4,13 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/browse/album_view.dart';
 import 'package:mobile/browse/artist_view.dart';
 import 'package:mobile/providers/metadata_providers.dart';
-import 'package:mobile/screens/random_tab.dart';
 import 'package:mobile/theme/prism_theme.dart';
+import 'package:mobile/widgets/discover_grids.dart';
 
 void main() {
-  testWidgets('RandomTab renders 6 albums and 6 artists', (tester) async {
+  testWidgets('DiscoverAlbumsGrid renders 6 album tiles', (tester) async {
     final albums = _fixtureAlbums(20);
-    final artists = _fixtureArtists(20);
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -18,34 +17,40 @@ void main() {
       ProviderScope(
         overrides: [
           albumsProvider.overrideWith((ref) => AsyncValue.data(albums)),
-          artistsProvider.overrideWith((ref) => AsyncValue.data(artists)),
         ],
         child: MaterialApp(
           theme: PrismTheme.light(),
-          home: const Scaffold(body: RandomTab()),
+          home: const Scaffold(body: DiscoverAlbumsGrid()),
         ),
       ),
     );
     await tester.pumpAndSettle();
-
-    // Six AlbumTiles + six ArtistTiles. (We can't filter by widget type
-    // because tiles are private; assert by tap-target count via text.)
-    final albumTitles = find.textContaining('Album ');
-    expect(albumTitles, findsNWidgets(6));
-
-    final artistNames = find.textContaining('Artist ');
-    // Each ArtistTile renders a name; six expected.
-    expect(artistNames, findsNWidgets(6));
+    expect(find.textContaining('Album '), findsNWidgets(6));
   });
 
-  testWidgets(
-      'per-section refresh changes only that section (independent seeds)',
-      (tester) async {
+  testWidgets('DiscoverArtistsGrid renders 6 artist tiles', (tester) async {
+    final artists = _fixtureArtists(20);
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          artistsProvider.overrideWith((ref) => AsyncValue.data(artists)),
+        ],
+        child: MaterialApp(
+          theme: PrismTheme.light(),
+          home: const Scaffold(body: DiscoverArtistsGrid()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Artist '), findsNWidgets(6));
+  });
+
+  testWidgets('per-grid refresh changes only that grid', (tester) async {
     final albums = _fixtureAlbums(20);
     final artists = _fixtureArtists(20);
-    // Tall surface so both section headers (and their refresh buttons)
-    // render in the same frame — RandomTab's outer ListView eagerly
-    // builds, but the album grid + artist row need vertical room.
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -57,39 +62,42 @@ void main() {
         ],
         child: MaterialApp(
           theme: PrismTheme.light(),
-          home: const Scaffold(body: RandomTab()),
+          home: Scaffold(
+            body: ListView(
+              children: const [
+                DiscoverAlbumsGrid(),
+                DiscoverArtistsGrid(),
+              ],
+            ),
+          ),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    // Capture initial album titles + artist names.
-    final initialAlbumTitles = _visibleTitlesContaining(tester, 'Album ');
-    final initialArtistNames = _visibleTitlesContaining(tester, 'Artist ');
+    final initialAlbums = _visibleTitlesContaining(tester, 'Album ');
+    final initialArtists = _visibleTitlesContaining(tester, 'Artist ');
+    final refreshes = find.byTooltip('Refresh');
+    expect(refreshes, findsNWidgets(2),
+        reason: 'one refresh per grid');
 
-    // Tap the album-section refresh and pump.
-    final refreshButtons = find.byTooltip('Refresh');
-    expect(refreshButtons, findsNWidgets(2),
-        reason: 'two refresh affordances — one per section');
-    await tester.tap(refreshButtons.first);
+    await tester.tap(refreshes.first);
     await tester.pumpAndSettle();
-    final afterAlbumRefresh = _visibleTitlesContaining(tester, 'Album ');
+    final afterAlbums = _visibleTitlesContaining(tester, 'Album ');
     final unchangedArtists = _visibleTitlesContaining(tester, 'Artist ');
 
-    // Albums almost certainly differ; artists must be identical.
-    expect(unchangedArtists, equals(initialArtistNames),
-        reason: 'artist seed must not change when albums refresh');
-    // Probability all 6 collide is ~1/(20 choose 6) ≈ tiny; OK to assert.
-    expect(afterAlbumRefresh, isNot(equals(initialAlbumTitles)),
-        reason: 'album seed should produce a different ordering');
+    expect(unchangedArtists, equals(initialArtists),
+        reason: 'artist seed must not change when album refresh fires');
+    expect(afterAlbums, isNot(equals(initialAlbums)),
+        reason: 'album seed should reseed to a new ordering');
   });
 }
 
 List<String> _visibleTitlesContaining(WidgetTester tester, String prefix) {
-  final finder = find.byWidgetPredicate(
-    (w) => w is Text && (w.data?.contains(prefix) ?? false),
-  );
-  return finder
+  return find
+      .byWidgetPredicate(
+        (w) => w is Text && (w.data?.contains(prefix) ?? false),
+      )
       .evaluate()
       .map((e) => (e.widget as Text).data ?? '')
       .where((s) => s.isNotEmpty)
