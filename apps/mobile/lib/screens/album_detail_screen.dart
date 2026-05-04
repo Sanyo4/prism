@@ -1,3 +1,6 @@
+import 'dart:math' show Random;
+import 'dart:ui';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -89,21 +92,57 @@ class _AlbumDetailBody extends ConsumerWidget {
                 expandedHeight: 320,
                 pinned: true,
                 flexibleSpace: FlexibleSpaceBar(
-                  background: GestureDetector(
-                    // Slice 5 — long-press the hero to start radio from
-                    // the album seed.
-                    onLongPress: () => RadioContextSheet.show(
-                      context,
-                      AlbumSeed(albumKey: album.id, title: album.title),
-                    ),
-                    child: Hero(
-                      tag: HeroTags.art(album.id),
-                      flightShuttleBuilder: _flightShuttleBuilder,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: _Hero(album: album),
+                  centerTitle: false,
+                  titlePadding: EdgeInsets.fromLTRB(
+                    tokens.s4,
+                    0,
+                    tokens.s4,
+                    tokens.s3,
+                  ),
+                  background: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      GestureDetector(
+                        // Slice 5 — long-press the hero to start radio from
+                        // the album seed.
+                        onLongPress: () => RadioContextSheet.show(
+                          context,
+                          AlbumSeed(albumKey: album.id, title: album.title),
+                        ),
+                        child: Hero(
+                          tag: HeroTags.art(album.id),
+                          flightShuttleBuilder: _flightShuttleBuilder,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(24),
+                            child: _Hero(album: album),
+                          ),
+                        ),
                       ),
-                    ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: 110,
+                        child: ClipRect(
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                            child: const DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Color(0x00000000),
+                                    Color(0x66000000),
+                                  ],
+                                ),
+                              ),
+                              child: SizedBox.expand(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   title: Hero(
                     tag: HeroTags.title(album.id),
@@ -141,34 +180,40 @@ class _AlbumDetailBody extends ConsumerWidget {
                       radius: tokens.s3,
                       padding: EdgeInsets.all(tokens.s4),
                       tint: palette.isNeutral ? null : palette.dominant,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Hero(
-                            tag: HeroTags.artist(album.id),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: Text(
-                                album.artist,
-                                style: scale.display20,
-                              ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Hero(
+                                  tag: HeroTags.artist(album.id),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: Text(
+                                      album.artist,
+                                      style: scale.display20,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(height: tokens.s1),
+                                Text(
+                                  '${album.year ?? '—'} · ${album.trackCount} tracks',
+                                  style: scale.caption13.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ),
                           ),
-                          if (album.year != null)
-                            Text(
-                              '${album.year}',
-                              style: scale.body16.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          SizedBox(height: tokens.s1),
-                          Text(
-                            '${album.trackCount} tracks · '
-                            '${_formatDur(album.totalDuration)}',
-                            style: scale.caption13.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
+                          SizedBox(width: tokens.s3),
+                          _AlbumActions(album: album),
                         ],
                       ),
                     ),
@@ -481,6 +526,80 @@ Iterable<ThemeExtension<dynamic>> _withPalette(
   }
   yield palette;
 }
+
+/// Play / Shuffle / Heart actions, rendered as a tight vertical column
+/// of icon buttons. Intended to occupy the right-hand side of the
+/// metadata Glass card, next to the artist / year text.
+///
+/// Play and Shuffle drive the queue immediately. Heart is a placeholder
+/// that surfaces a "coming soon" snackbar — library favourites land in
+/// slice-12.
+@visibleForTesting
+class AlbumActions extends ConsumerWidget {
+  const AlbumActions({super.key, required this.album});
+  final AlbumView album;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final palette = theme.extension<AlbumPalette>();
+    final tinted = palette != null && !palette.isNeutral;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton.filled(
+          tooltip: 'Play',
+          icon: const Icon(Icons.play_arrow),
+          style: tinted
+              ? IconButton.styleFrom(backgroundColor: palette.dominant)
+              : null,
+          onPressed: () {
+            if (album.tracks.isEmpty) return;
+            ref.read(queueProvider.notifier).loadContext(
+                  album.tracks,
+                  startIndex: 0,
+                );
+            // ignore: discarded_futures
+            ref.read(playbackServiceProvider).play();
+          },
+        ),
+        SizedBox(height: tokens.s1),
+        IconButton(
+          tooltip: 'Shuffle',
+          icon: const Icon(Icons.shuffle),
+          onPressed: () {
+            if (album.tracks.isEmpty) return;
+            final shuffled = List<Track>.of(album.tracks)..shuffle(Random());
+            ref.read(queueProvider.notifier).loadContext(
+                  shuffled,
+                  startIndex: 0,
+                );
+            // ignore: discarded_futures
+            ref.read(playbackServiceProvider).play();
+          },
+        ),
+        SizedBox(height: tokens.s1),
+        IconButton(
+          tooltip: 'Favourite',
+          icon: const Icon(Icons.favorite_border),
+          onPressed: () {
+            ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+              const SnackBar(
+                content: Text('Favourites coming soon'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+// Private alias so the rest of this file references the short name.
+typedef _AlbumActions = AlbumActions;
 
 extension _Firstish<E> on Iterable<E> {
   E? get firstOrNull {
