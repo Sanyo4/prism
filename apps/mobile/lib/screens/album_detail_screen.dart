@@ -1,5 +1,4 @@
 import 'dart:math' show Random;
-import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +14,7 @@ import '../providers/radio_providers.dart';
 import '../theme/palette_providers.dart';
 import '../widgets/embedded_art.dart';
 import '../widgets/prism_art_cache_manager.dart';
+import 'artist_detail_screen.dart';
 import 'radio_context_sheet.dart';
 
 /// Hero art + tracklist for one album. Tap a track → load context into
@@ -100,61 +100,16 @@ class _AlbumDetailBody extends ConsumerWidget {
                     tokens.s4,
                     tokens.s3,
                   ),
-                  background: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      // Slice-10b: radio is track-only — the hero no
-                      // longer carries an album-seed long-press. The
-                      // GestureDetector wrapper is retained as a stable
-                      // hit-test parent for the Hero so future tap /
-                      // pan gestures (e.g. drag-to-dismiss) have a
-                      // home.
-                      GestureDetector(
-                        child: Hero(
-                          tag: HeroTags.art(album.id),
-                          flightShuttleBuilder: _flightShuttleBuilder,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(24),
-                            child: _Hero(album: album),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        height: 110,
-                        child: ClipRect(
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                            child: const DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Color(0x00000000),
-                                    Color(0x66000000),
-                                  ],
-                                ),
-                              ),
-                              child: SizedBox.expand(),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  title: Hero(
-                    tag: HeroTags.title(album.id),
-                    flightShuttleBuilder: _titleFlightShuttleBuilder,
-                    child: Material(
-                      color: Colors.transparent,
-                      child: Text(
-                        album.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                  // Slice-11 §A2: dropped the BackdropFilter scrim +
+                  // overlay title (slice-10b §A4). The cover is just
+                  // cover art now; the album title moved into the
+                  // metadata Glass card below where it's readable.
+                  background: Hero(
+                    tag: HeroTags.art(album.id),
+                    flightShuttleBuilder: _flightShuttleBuilder,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: _Hero(album: album),
                     ),
                   ),
                 ),
@@ -185,15 +140,55 @@ class _AlbumDetailBody extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                // Slice-11 §A2: album title moved here
+                                // from the cover overlay. Now legible
+                                // against the Glass card surface. The
+                                // Hero is retained so the title still
+                                // flies in from the source AlbumTile.
+                                Hero(
+                                  tag: HeroTags.title(album.id),
+                                  flightShuttleBuilder:
+                                      _titleFlightShuttleBuilder,
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: Text(
+                                      album.title,
+                                      style: scale.display20.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(height: tokens.s1),
+                                // Slice-11 §A2: tappable artist →
+                                // ArtistDetailScreen. Underline hints at
+                                // affordance; behaviour: opaque so taps
+                                // outside the glyph still register.
                                 Hero(
                                   tag: HeroTags.artist(album.id),
                                   child: Material(
                                     color: Colors.transparent,
-                                    child: Text(
-                                      album.artist,
-                                      style: scale.display20,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () => Navigator.of(context).push(
+                                        ArtistDetailScreen.route(
+                                          album.artist.trim().toLowerCase(),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        album.artist,
+                                        style: scale.body16.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          decoration:
+                                              TextDecoration.underline,
+                                          decorationStyle:
+                                              TextDecorationStyle.dashed,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
                                   ),
                                 ),

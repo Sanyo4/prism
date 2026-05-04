@@ -56,11 +56,14 @@ class _ArtistDetailBody extends ConsumerWidget {
     final theme = Theme.of(context);
     final tokens = theme.extension<SpaceTokens>()!;
     final scale = theme.extension<TypographyScale>()!;
-    return Scaffold(
-      appBar: AppBar(title: Text(artist.name)),
-      body: ListView(
-        padding: EdgeInsets.all(tokens.s4),
-        children: [
+    return AuroraBackground(
+      variant: AuroraVariant.library,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(title: Text(artist.name)),
+        body: ListView(
+          padding: EdgeInsets.all(tokens.s4),
+          children: [
           // Slice-10b: radio is track-only — the avatar no longer
           // long-presses into an artist-seed radio start. The
           // GestureDetector wrapper would have been pointless without
@@ -118,7 +121,8 @@ class _ArtistDetailBody extends ConsumerWidget {
               onTap: () => _playOne(ref, t),
               onLongPress: () => _openRadioSheetForTrack(context, ref, t),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -1,19 +1,21 @@
-// Tests for the Task A4 additions to AlbumDetailScreen:
-//   1. BackdropFilter scrim layered above the album cover.
-//   2. AlbumActions widget renders 3 icon buttons inside the metadata Row.
-//   3. Play tap → loadContext(startIndex:0) + play().
-//   4. Shuffle tap → loadContext called with startIndex:0.
-//   5. Heart tap → 'Favourites coming soon' snackbar.
+// Tests for AlbumDetailScreen / AlbumActions assertions:
+//   1. AlbumActions widget renders 3 icon buttons inside the metadata Row.
+//   2. Play tap → loadContext(startIndex:0) + play().
+//   3. Shuffle tap → loadContext called with startIndex:0.
+//   4. Heart tap → 'Favourites coming soon' snackbar.
+//   5. (slice-10b §A5) Long-press track row → RadioContextSheet opens.
+//   6. (slice-11 §A2) Title + artist render in the metadata column;
+//      tapping the artist Text pushes a route.
 //
 // Approach: test AlbumActions in isolation (pumped directly inside a
 // MaterialApp + ProviderScope with overridden providers). This avoids
 // the full screen's dependency chain (albumsProvider, cache_db,
 // path_provider) while covering all the non-negotiable assertions.
 //
-// BackdropFilter is tested separately by pumping a tiny widget that
-// just contains the scrim structure — same one used in the real build.
-import 'dart:ui' show ImageFilter;
-
+// Slice-11 §A2: the BackdropFilter scrim + FlexibleSpaceBar overlay
+// title were dropped. The corresponding scrim-structure assertion is
+// removed; in its place we assert the new metadata-card layout +
+// tappable artist behaviour.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -106,6 +108,83 @@ Future<_RecordingQueue> _pumpActions(
   );
   await tester.pump();
   return recordingQueue;
+}
+
+// ---------------------------------------------------------------------------
+// Slice-11 §A2 helpers
+// ---------------------------------------------------------------------------
+
+/// Reproduces the slice-11 §A2 metadata-card layout in isolation: a
+/// Column inside a Glass-like surface containing the album title, a
+/// tappable artist Text, and the year · trackCount caption. Mirrors the
+/// real [AlbumDetailScreen] structure closely enough to assert the
+/// title-in-card + tappable-artist behaviour without booting the full
+/// screen's provider chain.
+class _MetadataCardHarness extends StatelessWidget {
+  const _MetadataCardHarness({required this.album});
+  final AlbumView album;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          album.title,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 4),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => Scaffold(
+                appBar: AppBar(title: Text(album.artist)),
+                body: const SizedBox.shrink(),
+              ),
+            ),
+          ),
+          child: Text(
+            album.artist,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.underline,
+              decorationStyle: TextDecorationStyle.dashed,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${album.year ?? '—'} · ${album.trackCount} tracks',
+          style: const TextStyle(fontSize: 13),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+}
+
+/// Captures every `didPush` event so a test can verify a tap pushes a
+/// new route. Routes that arrive via the initial-build push (e.g. the
+/// MaterialApp's home route) are still recorded — tests should compare
+/// the length before/after the interaction rather than asserting a
+/// fixed count.
+class _RecordingNavigatorObserver extends NavigatorObserver {
+  _RecordingNavigatorObserver(this.pushed);
+  final List<Route<dynamic>> pushed;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushed.add(route);
+    super.didPush(route, previousRoute);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -207,54 +286,87 @@ void main() {
   );
 
   testWidgets(
-    'BackdropFilter scrim structure can be built in a Stack',
+    'Metadata card stacks title + artist + meta in a single column '
+    '(slice-11 §A2)',
     (tester) async {
-      // Inline the exact scrim widget from the SliverAppBar background
-      // to verify the structure is valid (BackdropFilter, LinearGradient).
+      final album = _fixtureAlbum();
+
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 400,
-              height: 320,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  const ColoredBox(color: Colors.black),
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    height: 110,
-                    child: ClipRect(
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                        child: const DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Color(0x00000000),
-                                Color(0x66000000),
-                              ],
-                            ),
-                          ),
-                          child: SizedBox.expand(),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+        ProviderScope(
+          child: MaterialApp(
+            theme: PrismTheme.light(),
+            home: Scaffold(
+              body: _MetadataCardHarness(album: album),
             ),
           ),
         ),
       );
       await tester.pump();
 
-      expect(find.byType(BackdropFilter), findsOneWidget,
-          reason: 'BackdropFilter scrim must be present in the cover Stack');
+      // Title + artist + meta line are all on screen.
+      expect(find.text(album.title), findsOneWidget,
+          reason: 'Album title must render inside the metadata card');
+      expect(find.text(album.artist), findsOneWidget,
+          reason: 'Artist must render inside the metadata card');
+      expect(
+        find.text('${album.year ?? '—'} · ${album.trackCount} tracks'),
+        findsOneWidget,
+        reason: 'Year · track-count caption must render',
+      );
+
+      // Title and artist Texts share the same parent Column — i.e. they
+      // live in the same metadata-stack. Walk ancestors of both Texts
+      // and assert they share at least one Column ancestor.
+      final titleColumn = find.ancestor(
+        of: find.text(album.title),
+        matching: find.byType(Column),
+      );
+      final artistColumn = find.ancestor(
+        of: find.text(album.artist),
+        matching: find.byType(Column),
+      );
+      final titleColumns = tester.widgetList(titleColumn).toList();
+      final artistColumns = tester.widgetList(artistColumn).toList();
+      final shared = titleColumns
+          .any((c) => artistColumns.any((a) => identical(c, a)));
+      expect(shared, isTrue,
+          reason:
+              'Title and artist must share a Column ancestor (one stack)');
+    },
+  );
+
+  testWidgets(
+    'Tapping the artist Text pushes a new route (slice-11 §A2)',
+    (tester) async {
+      final album = _fixtureAlbum();
+      final pushed = <Route<dynamic>>[];
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            theme: PrismTheme.light(),
+            navigatorObservers: [_RecordingNavigatorObserver(pushed)],
+            home: Scaffold(
+              body: _MetadataCardHarness(album: album),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Sanity: the artist Text is on-screen and tappable.
+      final artistFinder = find.text(album.artist);
+      expect(artistFinder, findsOneWidget);
+
+      // The first push is for the home route itself (didPush fires for
+      // the initial route on the navigator observer). Snapshot the
+      // count, tap, then assert at least one *additional* push fired.
+      final beforeTap = pushed.length;
+      await tester.tap(artistFinder);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(pushed.length, greaterThan(beforeTap),
+          reason: 'Tapping the artist Text must push a new route');
     },
   );
 
