@@ -14,12 +14,14 @@ void main() {
         () {
       final albums = indexAlbums(tracks, const {}, const {});
       // 3 fully-tagged albums + 1 "Unknown Album" group (the tagless
-      // tracks at the tail of the fixture).
+      // tracks at the tail of the fixture). Slice-10c v3 case-folds
+      // the id (effectiveAlbumArtist + albumKey both lowercased) so
+      // case variants in the source tags collapse into a single bucket.
       final ids = albums.map((a) => a.id).toSet();
-      expect(ids, contains('Nirvana∷Nevermind'));
-      expect(ids, contains('Radiohead∷OK Computer'));
-      expect(ids, contains('Sigur Rós∷Ágætis byrjun'));
-      expect(ids, contains('Untagged Artist∷Unknown Album'));
+      expect(ids, contains('nirvana∷nevermind'));
+      expect(ids, contains('radiohead∷ok computer'));
+      expect(ids, contains('sigur rós∷ágætis byrjun'));
+      expect(ids, contains('untagged artist∷unknown album'));
     });
 
     test('sorts by case-insensitive title then artist (stable)', () {

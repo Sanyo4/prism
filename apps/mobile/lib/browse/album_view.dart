@@ -1,12 +1,16 @@
+import 'package:path/path.dart' as p;
 import 'package:prism_core/core.dart';
 
 import '../providers/library_view_prefs.dart';
 
 /// Stable, derived projection of one album.
 ///
-/// Identity ([id]) is `${albumArtist ?? artist}∷${album}` — the U+2237
-/// "proportion" glyph is rare enough in tag values that it works as a
-/// safe separator without ever colliding with real titles.
+/// Identity ([id]) is `${effectiveAlbumArtist.toLowerCase()}∷${album.toLowerCase()}`
+/// — the U+2237 "proportion" glyph is rare enough in tag values that it
+/// works as a safe separator without ever colliding with real titles.
+/// Slice-10c case-folded the id so two tracks tagged "The Album" and
+/// "the album" collapse into one group; display fields preserve the
+/// dominant original case.
 ///
 /// Cover-art resolution is two-hop: a track's path → release MBID
 /// (resolved by the backfill into `track_meta`) → CAA URL (resolved
@@ -72,19 +76,39 @@ class AlbumView {
       );
 }
 
-/// Pure derivation: groups [tracks] using a two-pass canonical-album-
-/// artist resolution that fixes the slice-10 §2.4 grouping bug.
+/// Pure derivation: groups [tracks] Strawberry-style on
+/// `(effectiveAlbumArtist, album)`, collapsing case variants and
+/// detecting Various Artists compilations.
 ///
-/// Pass 1 — walk every track. For each `(album-title-lower, trimmed)`
-/// key, collect the multiset of distinct non-null `albumArtist` values.
-/// The canonical artist for that title is the most-frequent non-null
-/// entry (ties broken by first-seen order to keep grouping deterministic
-/// across rebuilds).
+/// **Algorithm (slice-10c v3):**
 ///
-/// Pass 2 — group every track. The id is
-/// `<canonicalAlbumArtist OR _normalizeArtist(track.artist)> ∷ <album>`.
-/// `Track.albumArtist` is never mutated; the original tag flows
-/// untouched into the queue / palette / radio paths.
+/// 1. **Derive entries.** For each track:
+///    - `effectiveAA = albumArtist?.trim()` if non-empty, else
+///      `artist?.trim()`. Pure null-coalesce — no `feat./ft.`
+///      stripping, no lowercase, no normalization.
+///    - `albumKey = album?.trim()`, falling back to `'Unknown Album'`.
+///
+/// 2. **Detect compilations.** Bucket entries by case-folded album
+///    title. A bucket is treated as a Various Artists compilation
+///    when EITHER:
+///    - any track's `effectiveAA` already reads "various artists"
+///      (case-insensitive); OR
+///    - all tracks in the bucket share a single parent directory
+///      AND the bucket has ≥3 distinct case-folded effective artists.
+///    For a VA bucket, every entry's `effectiveAA` is canonicalised
+///    to literal `"Various Artists"`.
+///
+/// 3. **Group by case-folded id.** `id = lower(effectiveAA) ∷
+///    lower(albumKey)`. Same id ⇒ same group, regardless of the tag's
+///    original case. Display fields (`title`, `artist`) pick the
+///    most-frequent original-case form across the group's tracks
+///    (ties broken by first-seen order), so the dominant tag style
+///    wins without lowercasing the UI.
+///
+/// **Non-destructive guarantees** (slice-10 §2.4): `Track.albumArtist`
+/// and `Track.artist` are never mutated. The original tag values flow
+/// untouched into the queue, palette, and radio paths; only the
+/// derived projection sees the canonical "Various Artists" string.
 ///
 /// [releaseMbidByPath]: absolute file path → release MBID (from
 /// `track_meta`).
@@ -96,59 +120,61 @@ List<AlbumView> indexAlbums(
   Map<String, String?> releaseMbidByPath,
   Map<String, String?> coverByReleaseMbid,
 ) {
-  // Pass 1 — collect canonical album-artist hints per album title.
-  final seenOrder = <String, List<String>>{};
-  final counts = <String, Map<String, int>>{};
+  // Pass 1 — derive the raw effective album-artist + album for each track.
+  final entries = <_Entry>[];
   for (final t in tracks) {
-    final albumKey = (t.album?.trim().isNotEmpty ?? false)
-        ? t.album!.trim().toLowerCase()
-        : 'unknown album';
-    final aa = t.albumArtist?.trim();
-    if (aa == null || aa.isEmpty) continue;
-    final list = seenOrder.putIfAbsent(albumKey, () => <String>[]);
-    if (!list.contains(aa)) list.add(aa);
-    final m = counts.putIfAbsent(albumKey, () => <String, int>{});
-    m.update(aa, (c) => c + 1, ifAbsent: () => 1);
+    final aa = (t.albumArtist ?? '').trim();
+    final artistFallback = (t.artist ?? '').trim();
+    final albumName = (t.album ?? '').trim();
+    final effectiveAA = aa.isNotEmpty ? aa : artistFallback;
+    final albumKey = albumName.isEmpty ? 'Unknown Album' : albumName;
+    entries.add(_Entry(track: t, effectiveAA: effectiveAA, albumKey: albumKey));
   }
-  final canonicalByAlbum = <String, String>{};
-  counts.forEach((albumKey, m) {
-    String? bestKey;
-    var bestCount = -1;
-    for (final entry in seenOrder[albumKey]!) {
-      final c = m[entry] ?? 0;
-      if (c > bestCount) {
-        bestCount = c;
-        bestKey = entry;
+
+  // Pass 2 — Various-Artists detection. Bucket by case-folded album title;
+  // collapse compilations under the canonical "Various Artists" string.
+  final byAlbumLower = <String, List<_Entry>>{};
+  for (final e in entries) {
+    byAlbumLower.putIfAbsent(e.albumKey.toLowerCase(), () => <_Entry>[]).add(e);
+  }
+  for (final cluster in byAlbumLower.values) {
+    final tagSaysVA = cluster.any(
+      (e) => e.effectiveAA.toLowerCase() == 'various artists',
+    );
+    final allBlankAA = cluster.every(
+      (e) => (e.track.albumArtist == null || e.track.albumArtist!.trim().isEmpty),
+    );
+    final distinctArtists =
+        cluster.map((e) => e.effectiveAA.toLowerCase()).toSet();
+    final parentDirs = cluster.map((e) => p.dirname(e.track.path)).toSet();
+    final isHeuristicVA = allBlankAA &&
+        distinctArtists.length >= 3 &&
+        parentDirs.length == 1;
+    if (tagSaysVA || isHeuristicVA) {
+      for (final e in cluster) {
+        e.effectiveAA = 'Various Artists';
       }
     }
-    if (bestKey != null) canonicalByAlbum[albumKey] = bestKey;
-  });
-
-  // Pass 2 — group each track using the canonical hint or the
-  // normalised artist fallback.
-  final groups = <String, List<Track>>{};
-  final groupArtistDisplay = <String, String>{};
-  for (final t in tracks) {
-    final albumKey = (t.album?.trim().isNotEmpty ?? false)
-        ? t.album!.trim().toLowerCase()
-        : 'unknown album';
-    final canonical = canonicalByAlbum[albumKey];
-    final groupArtist = canonical ?? _normalizeArtist(t.artist ?? '');
-    final albumDisplay = (t.album?.trim().isNotEmpty ?? false)
-        ? t.album!.trim()
-        : 'Unknown Album';
-    final id = '$groupArtist∷$albumDisplay';
-    groups.putIfAbsent(id, () => <Track>[]).add(t);
-    groupArtistDisplay.putIfAbsent(id, () {
-      if (groupArtist.isNotEmpty) return groupArtist;
-      return 'Unknown Artist';
-    });
   }
-  final views = groups.entries
-      .map((e) => _buildAlbumView(
-            e.key,
-            e.value,
-            groupArtistDisplay[e.key] ?? 'Unknown Artist',
+
+  // Pass 3 — group by case-folded id; pick most-common original-case
+  // form for display fields.
+  final byId = <String, _Group>{};
+  for (final e in entries) {
+    final id = '${e.effectiveAA.toLowerCase()}∷${e.albumKey.toLowerCase()}';
+    final g = byId.putIfAbsent(id, () => _Group(id: id));
+    g.tracks.add(e.track);
+    if (e.effectiveAA.isNotEmpty) {
+      g.aaCounts.update(e.effectiveAA, (c) => c + 1, ifAbsent: () => 1);
+      g.aaOrder.putIfAbsent(e.effectiveAA, () => g.aaOrder.length);
+    }
+    g.albumCounts.update(e.albumKey, (c) => c + 1, ifAbsent: () => 1);
+    g.albumOrder.putIfAbsent(e.albumKey, () => g.albumOrder.length);
+  }
+
+  final views = byId.values
+      .map((g) => _buildAlbumView(
+            g,
             releaseMbidByPath,
             coverByReleaseMbid,
           ))
@@ -162,15 +188,13 @@ List<AlbumView> indexAlbums(
 }
 
 AlbumView _buildAlbumView(
-  String id,
-  List<Track> ts,
-  String artistDisplay,
+  _Group g,
   Map<String, String?> releaseMbidByPath,
   Map<String, String?> coverByReleaseMbid,
 ) {
   String? releaseMbid;
   String? coverUrl;
-  for (final t in ts) {
+  for (final t in g.tracks) {
     final mbid = releaseMbidByPath[t.path];
     if (mbid != null) {
       releaseMbid ??= mbid;
@@ -181,21 +205,18 @@ AlbumView _buildAlbumView(
       }
     }
   }
+  final dominantAA = _mostCommon(g.aaCounts, g.aaOrder) ?? 'Unknown Artist';
+  final dominantAlbum =
+      _mostCommon(g.albumCounts, g.albumOrder) ?? 'Unknown Album';
   return AlbumView(
-    id: id,
-    title: _albumTitle(ts.first),
-    artist: artistDisplay,
-    year: _firstYear(ts),
+    id: g.id,
+    title: dominantAlbum,
+    artist: dominantAA,
+    year: _firstYear(g.tracks),
     coverUrl: coverUrl,
     releaseMbid: releaseMbid,
-    tracks: List.unmodifiable(ts),
+    tracks: List.unmodifiable(g.tracks),
   );
-}
-
-String _albumTitle(Track t) {
-  final al = t.album?.trim();
-  if (al == null || al.isEmpty) return 'Unknown Album';
-  return al;
 }
 
 int? _firstYear(List<Track> ts) {
@@ -205,30 +226,53 @@ int? _firstYear(List<Track> ts) {
   return null;
 }
 
-/// Strips collaborator suffixes from an artist string. Case-insensitive
-/// match against `feat.`, `ft.`, `featuring`, `(feat. …)`, `(with …)`.
-/// `&` and `,` separators do not strip — they imply genuine multi-artist
-/// credits the user usually wants kept distinct.
-///
-/// Single-pass regex match — strips from the first marker onward, so
-/// `X feat. Y feat. Z` becomes `X`. Keeps trim semantics consistent
-/// with the rest of the album indexer.
-String _normalizeArtist(String input) {
-  if (input.trim().isEmpty) return '';
-  // The regex matches `(feat. anything-to-end)`, `(with anything)`,
-  // `(ft. anything)`, `feat. ...`, `ft. ...`, `featuring ...`,
-  // case-insensitively. The `\s+` before the marker prevents matching
-  // inside artist names that happen to contain "ft" as a substring.
-  final stripped = input.replaceFirst(
-    RegExp(
-      r'\s*(?:[(\[]\s*)?'
-      r'(?:feat\.?|ft\.?|featuring|with)\s'
-      r'.*$',
-      caseSensitive: false,
-    ),
-    '',
-  );
-  return stripped.trim();
+/// Picks the most-frequent string from [counts]. Ties are broken by the
+/// first-seen order recorded in [order] (lower index wins), so grouping
+/// stays deterministic across rebuilds and the dominant tag style ("The
+/// Album" vs "the album") in the source data shows through.
+String? _mostCommon(Map<String, int> counts, Map<String, int> order) {
+  if (counts.isEmpty) return null;
+  String? best;
+  var bestCount = -1;
+  var bestOrder = 1 << 30;
+  counts.forEach((value, count) {
+    final ord = order[value] ?? (1 << 30);
+    if (count > bestCount || (count == bestCount && ord < bestOrder)) {
+      best = value;
+      bestCount = count;
+      bestOrder = ord;
+    }
+  });
+  return best;
+}
+
+/// Internal carrier between Pass 1 and Pass 3. `effectiveAA` is mutable
+/// so Pass 2 can rewrite it to the canonical "Various Artists" string
+/// for compilation buckets — `Track.albumArtist` itself stays verbatim.
+class _Entry {
+  final Track track;
+  String effectiveAA;
+  final String albumKey;
+
+  _Entry({
+    required this.track,
+    required this.effectiveAA,
+    required this.albumKey,
+  });
+}
+
+/// Internal accumulator. Tracks frequency + first-seen order of each
+/// original-case tag so [_buildAlbumView] can pick the dominant display
+/// form per group.
+class _Group {
+  final String id;
+  final List<Track> tracks = <Track>[];
+  final Map<String, int> aaCounts = <String, int>{};
+  final Map<String, int> aaOrder = <String, int>{};
+  final Map<String, int> albumCounts = <String, int>{};
+  final Map<String, int> albumOrder = <String, int>{};
+
+  _Group({required this.id});
 }
 
 /// Spec §2.5 — secondary sort always falls back to title (case-
