@@ -1,9 +1,48 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:prism_playlist_engine/playlist_engine.dart';
 import 'package:test/test.dart';
 
 import 'fakes/fake_repo.dart';
+
+/// Slice-11 §B3 — wraps a [FakeRepo] and records every `k` value
+/// passed to `knnByEmbedding`. Used by the pool-bound test.
+class _RepoSpy implements PlaylistRepo {
+  _RepoSpy(this._inner);
+
+  final FakeRepo _inner;
+  final List<int> kArgs = <int>[];
+
+  @override
+  Future<Float32List> embeddingOf(int trackId) =>
+      _inner.embeddingOf(trackId);
+
+  @override
+  Future<Float32List?> meanEmbeddingForAlbum(String albumKey) =>
+      _inner.meanEmbeddingForAlbum(albumKey);
+
+  @override
+  Future<Float32List?> meanEmbeddingForArtist(String artist) =>
+      _inner.meanEmbeddingForArtist(artist);
+
+  @override
+  Future<List<KnnHit>> knnByEmbedding(Float32List seed, {int k = 200}) {
+    kArgs.add(k);
+    return _inner.knnByEmbedding(seed, k: k);
+  }
+
+  @override
+  Future<CandidateMeta> metaOf(int trackId) => _inner.metaOf(trackId);
+
+  @override
+  Future<List<CandidateMeta>> metaOfMany(Iterable<int> ids) =>
+      _inner.metaOfMany(ids);
+
+  @override
+  Future<List<int>> libraryWideFallback({int limit = 100}) =>
+      _inner.libraryWideFallback(limit: limit);
+}
 
 /// Helper that seeds a 30-track FakeRepo with a spread of artists,
 /// BPMs, and keys. Track 0 is the seed; remaining tracks span 5
@@ -275,6 +314,138 @@ void main() {
       // `dart test` enables asserts by default.
       expect(() async => engine.next(session, repo),
           throwsA(isA<AssertionError>()));
+    });
+
+    // ----------------------------------------------------------------
+    // Slice-11 §B3 — top-K-from-top-N weighted sampling.
+    // ----------------------------------------------------------------
+
+    test(
+      'RadioEngineConfig.deterministic regresses to argmax — same picks twice',
+      () async {
+        // §B3 regression guard: with `temperature: 0.0, topNMultiplier: 1`
+        // the engine must produce the slice-5 / pre-slice-11 sequence
+        // — i.e. two `next` calls from the same starting session pick
+        // the same track. This catches accidental drift in the heap
+        // ordering or the deterministic short-circuit in
+        // `_sampleFromHeap`.
+        //
+        // The two runs use freshly-built repos so the FakeRepo's
+        // `libraryWideFallback` RNG starts in the same state — the
+        // 30-track fixture sits below the 50-track sparse threshold
+        // and the fallback shuffle would otherwise reorder the
+        // working set between runs.
+        const engine = RadioEngine(
+          sampling: RadioEngineConfig.deterministic,
+        );
+        Future<List<int>> runTen() async {
+          final repo = _seed30();
+          final base = await RadioEngine.fromTrack(
+            trackId: 0,
+            title: 'seed',
+            repo: repo,
+          );
+          final picks = <int>[];
+          var s = base;
+          for (var i = 0; i < 10; i++) {
+            final r = await engine.next(s, repo);
+            expect(r, isNotNull, reason: 'pick $i');
+            picks.add(r!.pickedTrackId);
+            s = r.nextSession;
+          }
+          return picks;
+        }
+
+        final picks1 = await runTen();
+        final picks2 = await runTen();
+        expect(picks2, orderedEquals(picks1),
+            reason: 'deterministic config must produce identical sequences');
+      },
+    );
+
+    test(
+      'temperature>0 with different seeded RNGs produces different picks',
+      () async {
+        // §B3 randomness assertion: with default config and two
+        // different seeded RNGs, ≥1 of 20 tracks must differ between
+        // the two runs. The bar is intentionally loose — the sampler
+        // can still bias heavily toward the same close-distance
+        // candidates — but identity for all 20 picks would mean the
+        // jitter is broken.
+        final repo = _seed30();
+        final engineA = RadioEngine(
+          sampling: RadioEngineConfig(random: math.Random(42)),
+        );
+        final engineB = RadioEngine(
+          sampling: RadioEngineConfig(random: math.Random(43)),
+        );
+        final baseA = await RadioEngine.fromTrack(
+          trackId: 0,
+          title: 'seed',
+          repo: repo,
+        );
+        final baseB = await RadioEngine.fromTrack(
+          trackId: 0,
+          title: 'seed',
+          repo: repo,
+        );
+        Future<List<int>> runTwenty(
+          RadioEngine engine,
+          RadioSession start,
+        ) async {
+          final out = <int>[];
+          var s = start;
+          for (var i = 0; i < 20; i++) {
+            final r = await engine.next(s, repo);
+            if (r == null) break;
+            out.add(r.pickedTrackId);
+            s = r.nextSession;
+          }
+          return out;
+        }
+
+        final runA = await runTwenty(engineA, baseA);
+        final runB = await runTwenty(engineB, baseB);
+        expect(runA, hasLength(20));
+        expect(runB, hasLength(20));
+        var differing = 0;
+        for (var i = 0; i < 20; i++) {
+          if (runA[i] != runB[i]) differing++;
+        }
+        expect(
+          differing,
+          greaterThanOrEqualTo(1),
+          reason: 'sampler with different RNG seeds must diverge — '
+              'got $differing/20 differing picks',
+        );
+      },
+    );
+
+    test('top-N pool is bounded by topNMultiplier — kNN k arg ≤80',
+        () async {
+      // §B3 pool-bound guard: with `topNMultiplier: 4` the engine must
+      // request ≤80 candidates from `knnByEmbedding`, not the slice-5
+      // flat 200. We wrap the FakeRepo to capture the `k` arg.
+      final inner = _seed30();
+      final spy = _RepoSpy(inner);
+      const engine = RadioEngine(
+        sampling: RadioEngineConfig(topNMultiplier: 4),
+      );
+      final session = await RadioEngine.fromTrack(
+        trackId: 0,
+        title: 'seed',
+        repo: spy,
+      );
+      // Drain the kNN-arg log — `fromTrack` doesn't call kNN, only
+      // `next` does, so the next() below should be the first capture.
+      spy.kArgs.clear();
+      await engine.next(session, spy);
+      expect(spy.kArgs, isNotEmpty,
+          reason: 'engine must call knnByEmbedding');
+      for (final k in spy.kArgs) {
+        expect(k, lessThanOrEqualTo(80),
+            reason: 'pool size must be K · topNMultiplier = 20·4 = 80');
+      }
     });
   });
 
