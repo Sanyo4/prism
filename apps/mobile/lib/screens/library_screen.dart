@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:prism_core/core.dart';
 import 'package:prism_ui/ui.dart';
 
 import '../providers/cast_providers.dart';
 import '../providers/metadata_providers.dart';
-import '../providers/playback_providers.dart';
-import '../providers/radio_providers.dart';
 import '../shell/app_shell.dart';
 import '../widgets/album_tile.dart';
 import '../widgets/artist_tile.dart';
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
+import 'songs_shuffle_tab.dart';
 
 /// 6-tab Library surface. Slice 4 adds **Vibe** as a sixth tab —
 /// classifier-native chips + tempo band, backed by the sidecar cache.
@@ -229,162 +227,10 @@ class _PlaylistsTab extends StatelessWidget {
   }
 }
 
-class _SongsTab extends ConsumerWidget {
+class _SongsTab extends StatelessWidget {
   const _SongsTab();
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final mergedAsync = ref.watch(trackWithPatchProvider);
-    return mergedAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Scan failed: $e')),
-      data: (merged) => merged.tracks.isEmpty
-          ? const _EmptyTab(text: 'No tracks yet.')
-          : _SongsList(tracks: merged.tracks),
-    );
-  }
-}
-
-/// Songs tab body — preserves slice 1's TracksScreen behaviour
-/// byte-for-byte: tap plays from the row, long-press opens the
-/// `Play Next` / `Add to Queue` modal sheet (slice 1 §11.8). The
-/// only difference from slice 1 is the input list, which now flows
-/// from [trackWithPatchProvider] so MB-sourced fields appear in the
-/// title/subtitle without changing this widget.
-class _SongsList extends ConsumerWidget {
-  const _SongsList({required this.tracks});
-  final List<Track> tracks;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return ListView.builder(
-      itemCount: tracks.length,
-      itemBuilder: (context, i) {
-        final t = tracks[i];
-        return ListTile(
-          title: Text(
-            _displayTitle(t),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: _subtitleOf(t) == null
-              ? null
-              : Text(_subtitleOf(t)!,
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-          trailing: Text(_formatDuration(t.duration)),
-          onTap: () => _playFrom(ref, i),
-          onLongPress: () => _showTrackActions(context, ref, t),
-        );
-      },
-    );
-  }
-
-  void _playFrom(WidgetRef ref, int index) {
-    ref.read(queueProvider.notifier).loadContext(tracks, startIndex: index);
-    // ignore: discarded_futures — fire-and-forget; errors surface via
-    // the player state stream to NowPlayingScreen.
-    ref.read(playbackServiceProvider).play();
-  }
-
-  void _showTrackActions(BuildContext context, WidgetRef ref, Track track) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text(
-                _displayTitle(track),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(sheetContext).textTheme.titleMedium,
-              ),
-              subtitle: _subtitleOf(track) == null
-                  ? null
-                  : Text(_subtitleOf(track)!,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-            ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.playlist_play),
-              title: const Text('Play Next'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                ref.read(queueProvider.notifier).playNext(track);
-                _snack(context, 'Added to Up Next');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.queue_music),
-              title: const Text('Add to Queue'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                ref.read(queueProvider.notifier).addToUpcoming(track);
-                _snack(context, 'Added to queue');
-              },
-            ),
-            // Slice 5 — third tile, "Start radio from this track".
-            ListTile(
-              leading: const Icon(Icons.radio_outlined),
-              title: const Text('Start radio from this track'),
-              onTap: () async {
-                Navigator.of(sheetContext).pop();
-                // ignore: discarded_futures
-                await ref
-                    .read(radioSessionProvider.notifier)
-                    .startFromTrack(track);
-                if (context.mounted) _snack(context, 'Radio started');
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _snack(BuildContext context, String message) {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
-      );
-  }
-}
-
-String _displayTitle(Track t) {
-  final title = t.title;
-  if (title != null && title.isNotEmpty) return title;
-  final path = t.path;
-  final slash = path.lastIndexOf('/');
-  final base = slash < 0 ? path : path.substring(slash + 1);
-  final dot = base.lastIndexOf('.');
-  return dot <= 0 ? base : base.substring(0, dot);
-}
-
-String? _subtitleOf(Track t) {
-  final artist = t.artist ?? t.albumArtist;
-  final album = t.album;
-  if (artist == null && album == null) return null;
-  if (artist == null) return album;
-  if (album == null) return artist;
-  return '$artist — $album';
-}
-
-String _formatDuration(Duration? d) {
-  if (d == null) return '—';
-  final total = d.inSeconds;
-  final h = total ~/ 3600;
-  final m = (total % 3600) ~/ 60;
-  final s = total % 60;
-  final ss = s.toString().padLeft(2, '0');
-  if (h > 0) {
-    final mm = m.toString().padLeft(2, '0');
-    return '$h:$mm:$ss';
-  }
-  return '$m:$ss';
+  Widget build(BuildContext context) => const SongsShuffleTab();
 }
 
 class _EmptyTab extends StatelessWidget {
