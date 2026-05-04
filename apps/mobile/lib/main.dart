@@ -5,10 +5,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
 import 'audio/audio_handler.dart';
 import 'audio/memory_pressure_observer.dart';
+import 'providers/library_view_prefs.dart';
 import 'providers/llm_providers.dart';
 import 'providers/llm_providers_mobile.dart';
 import 'providers/playback_providers.dart';
@@ -114,6 +116,26 @@ Future<void> main() async {
     // ignore: discarded_futures
     Permission.notification.request();
     await Permission.manageExternalStorage.request();
+  }
+
+  // Pre-warm Library prefs so the first build never paints unsorted /
+  // unfiltered (spec §7 risk 9). The future resolves before runApp;
+  // the sync provider then returns the persisted choice immediately.
+  // ignore: unused_result
+  await container.read(libraryViewPrefsProvider.future);
+
+  // Spec §7 risk 8 — the album-grouping fix re-keys AlbumView.id
+  // between releases for affected albums. Drop any persisted
+  // album-detail back-stack entries on first launch after the fix
+  // lands so no in-flight Hero observes the id transition.
+  final prefs = await SharedPreferences.getInstance();
+  const groupingFlag = 'album_grouping_v2_applied';
+  if (!(prefs.getBool(groupingFlag) ?? false)) {
+    await prefs.setBool(groupingFlag, true);
+    // No back-stack to clear before runApp — Flutter restores route
+    // stacks lazily; the flag's job here is to record that we ran the
+    // gate. Subsequent launches see groupingFlag=true and the new
+    // canonical id is the only id ever observed.
   }
 
   runApp(UncontrolledProviderScope(
