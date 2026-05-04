@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_core/core.dart';
+import 'package:prism_playlist_engine/playlist_engine.dart' show TrackSeed;
 import 'package:prism_ui/ui.dart';
 
 import '../providers/playback_providers.dart';
+import '../providers/radio_providers.dart';
 import '../shell/app_shell.dart';
+import 'radio_context_sheet.dart';
 
 /// Three-section queue view — History (read-only) / Now Playing /
 /// Up Next (PlayNext, user-queued) / Upcoming (context, collapsible).
@@ -310,12 +313,12 @@ class _SectionPlaceholder extends StatelessWidget {
   }
 }
 
-class _HistoryRow extends StatelessWidget {
+class _HistoryRow extends ConsumerWidget {
   const _HistoryRow({required this.track});
   final Track track;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return ListTile(
       title: Text(
@@ -332,16 +335,17 @@ class _HistoryRow extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
             ),
+      onLongPress: () => _openRadioSheetForTrack(context, ref, track),
     );
   }
 }
 
-class _NowPlayingRow extends StatelessWidget {
+class _NowPlayingRow extends ConsumerWidget {
   const _NowPlayingRow({required this.track});
   final Track track;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return ListTile(
       leading: Icon(Icons.play_arrow, color: theme.colorScheme.primary),
@@ -362,6 +366,7 @@ class _NowPlayingRow extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: theme.colorScheme.primary),
             ),
+      onLongPress: () => _openRadioSheetForTrack(context, ref, track),
     );
   }
 }
@@ -428,6 +433,7 @@ class _MutableRow extends ConsumerWidget {
         ],
       ),
       onTap: () => _jumpToHere(ref),
+      onLongPress: () => _openRadioSheetForTrack(context, ref, track),
     );
   }
 
@@ -484,12 +490,35 @@ class _EmptyQueueView extends StatelessWidget {
         child: const Text(
           'The queue is empty.\n\n'
           'Tap a track on the Tracks tab to start a playback context, '
-          'or long-press a track for "Play Next" / "Add to Queue".',
+          'or long-press a track to start radio from it.',
           textAlign: TextAlign.center,
         ),
       ),
     );
   }
+}
+
+/// Slice-10b: shared file-private helper for the History / Now-Playing /
+/// Mutable rows. Resolves the cache `tracks.id` for [track] via
+/// [pathToIdProvider] and opens the radio context sheet seeded from it.
+/// No-ops when the path hasn't been ingested yet (rare on a queue row —
+/// every track in the queue was loaded from a tracks-table source).
+Future<void> _openRadioSheetForTrack(
+  BuildContext context,
+  WidgetRef ref,
+  Track track,
+) async {
+  final pathToId = await ref.read(pathToIdProvider.future);
+  final id = pathToId[track.path];
+  if (id == null) return;
+  if (!context.mounted) return;
+  await RadioContextSheet.show(
+    context,
+    TrackSeed(
+      trackId: id,
+      title: track.title ?? _displayTitle(track),
+    ),
+  );
 }
 
 String _displayTitle(Track t) {

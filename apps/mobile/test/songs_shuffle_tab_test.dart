@@ -43,41 +43,49 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Shuffle play'), findsOneWidget);
     expect(find.text('True Shuffle'), findsOneWidget);
-    expect(find.text('Steer by vibe'), findsOneWidget);
+    // Vibe header consolidated to single-select push pattern.
+    expect(find.text('Pick a vibe'), findsOneWidget);
   });
 
-  testWidgets('toggling a chip refreshes the deck via shuffleDeckProvider',
-      (tester) async {
-    var lastChipsSeen = <MoodChip>{};
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          shuffleDeckProvider.overrideWith((ref) async {
-            final state = ref.watch(songsShuffleStateProvider);
-            lastChipsSeen = state.chips;
-            return const <ShuffleTrack>[];
-          }),
-        ],
-        child: MaterialApp(
-          theme: PrismTheme.light(),
-          home: const Scaffold(body: SongsShuffleTab()),
+  testWidgets(
+    'tapping a chip pushes a new route (single-select consolidation)',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            shuffleDeckProvider.overrideWith(
+              (ref) async => const <ShuffleTrack>[],
+            ),
+          ],
+          child: MaterialApp(
+            theme: PrismTheme.light(),
+            home: const Scaffold(body: SongsShuffleTab()),
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    // Tap the Chill chip; deck refresh sees {chill}.
-    await tester.tap(find.text('Chill'));
-    await tester.pumpAndSettle();
-    expect(lastChipsSeen, equals(<MoodChip>{MoodChip.chill}));
+      // Sanity: nothing pushed yet, so canPop() is false.
+      var navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      expect(navigator.canPop(), isFalse);
 
-    // Tap Focus → {chill, focus}.
-    await tester.tap(find.text('Focus'));
-    await tester.pumpAndSettle();
-    expect(lastChipsSeen, equals(<MoodChip>{MoodChip.chill, MoodChip.focus}));
-  });
+      // Tap Chill. The default (single-select) MoodChipRow controller
+      // navigates to MoodResultsScreen. We don't pumpAndSettle because
+      // MoodResultsScreen reads cache-db-dependent providers we haven't
+      // overridden — the screen sits in a loading state forever. A few
+      // frames are enough to push the route.
+      await tester.tap(find.text('Chill'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
 
-  testWidgets('True Shuffle toggle dims chips and bypasses chip mode',
+      navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      expect(navigator.canPop(), isTrue,
+          reason:
+              'Tapping a chip should push MoodResultsScreen onto the navigator.');
+    },
+  );
+
+  testWidgets('True Shuffle toggle flips the state',
       (tester) async {
     var lastTrueShuffle = false;
     await tester.pumpWidget(

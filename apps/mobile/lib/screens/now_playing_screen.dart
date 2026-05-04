@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:prism_core/core.dart';
+import 'package:prism_playlist_engine/playlist_engine.dart' show TrackSeed;
 import 'package:prism_ui/ui.dart';
 
 import '../providers/cast_providers.dart';
@@ -12,6 +13,7 @@ import '../widgets/cast_sheet.dart';
 import '../widgets/embedded_art.dart';
 import '../widgets/radio_badge.dart';
 import '../widgets/steer_chip_bar.dart';
+import 'radio_context_sheet.dart';
 
 /// Full-screen "what's playing right now" surface — title / artist /
 /// album, a scrubber, and prev / play-pause / next transport controls.
@@ -267,7 +269,7 @@ class _RoundGlassButton extends StatelessWidget {
   }
 }
 
-class _PlayerView extends StatelessWidget {
+class _PlayerView extends ConsumerWidget {
   const _PlayerView({
     required this.track,
     required this.position,
@@ -295,7 +297,7 @@ class _PlayerView extends StatelessWidget {
   final VoidCallback onNext;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final tokens = theme.extension<SpaceTokens>()!;
     final scale = theme.extension<TypographyScale>()!;
@@ -350,11 +352,21 @@ class _PlayerView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  _displayTitle(track),
-                  style: scale.display28,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                // Slice-10b: long-pressing the title starts radio from
+                // *this* track. The wireframe makes the title the
+                // primary interactive target on the now-playing
+                // metadata strip; tap is reserved for future go-to-
+                // album navigation, so long-press is a clean home for
+                // the radio entry point.
+                GestureDetector(
+                  onLongPress: () =>
+                      _openRadioSheetForCurrentTrack(context, ref),
+                  child: Text(
+                    _displayTitle(track),
+                    style: scale.display28,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 SizedBox(height: tokens.s1),
                 Text(
@@ -436,7 +448,117 @@ class _PlayerView extends StatelessWidget {
               ),
             ],
           ),
-          SizedBox(height: tokens.s4),
+          SizedBox(height: tokens.s2),
+          // Bottom utility row — wireframe `mobile-detail.jsx:243-258`:
+          // glass strip with [volume icon → slider → cast → queue].
+          // Cast is duplicated with the header button intentionally,
+          // matching the wireframe spec; tapping the queue icon pushes
+          // the existing `/queue` route (which had no callers prior to
+          // this row).
+          const _BottomUtilityRow(),
+        ],
+      ),
+    );
+  }
+
+  /// Slice-10b: long-press the title to start radio from the currently
+  /// playing track. Mirrors the row-level helper in `artist_detail_screen.dart`
+  /// — resolves the track's cache-db `trackId` via [pathToIdProvider] and
+  /// hands off to [RadioContextSheet]. Bails silently if the path isn't
+  /// indexed yet (e.g. the file was loaded outside the ingest path).
+  Future<void> _openRadioSheetForCurrentTrack(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final pathToId = await ref.read(pathToIdProvider.future);
+    final id = pathToId[track.path];
+    if (id == null) return;
+    if (!context.mounted) return;
+    await RadioContextSheet.show(
+      context,
+      TrackSeed(
+        trackId: id,
+        title: _displayTitle(track),
+      ),
+    );
+  }
+}
+
+/// Wireframe `mobile-detail.jsx:243-258`.
+///
+/// Layout: a [Glass] strip containing a leading volume glyph, an
+/// expanded [Slider], and trailing Cast + Queue [IconButton]s.
+///
+/// Volume slider: [PlaybackService] does not currently expose a
+/// public setter — its internal `setVolume` is reserved for the
+/// ReplayGain pipeline (gain trim per track). The slider therefore
+/// renders as a placeholder that holds local state only; wiring it
+/// to a real volume bus is a follow-up. The control still feels
+/// alive (drag updates the thumb) so the row matches the wireframe's
+/// affordance.
+class _BottomUtilityRow extends ConsumerStatefulWidget {
+  const _BottomUtilityRow();
+
+  @override
+  ConsumerState<_BottomUtilityRow> createState() => _BottomUtilityRowState();
+}
+
+class _BottomUtilityRowState extends ConsumerState<_BottomUtilityRow> {
+  // TODO(slice-12): wire to a real `volumeProvider` once
+  // PlaybackService exposes a UI-facing volume setter (separate from
+  // the ReplayGain trim path).
+  double _volume = 0.7;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final activeTransport = ref.watch(transportProvider);
+    final isRemote = activeTransport.id != 'local';
+    // Compact heights — the now-playing Column already pushes against
+    // the viewport on phone-sized surfaces; the wireframe's
+    // `padding: '10px 14px'` (~tokens.s2 / tokens.s3) keeps the strip
+    // shallow without sacrificing tap targets.
+    return Glass(
+      intensity: GlassIntensity.light,
+      radius: tokens.s4,
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.s3,
+        vertical: tokens.s1,
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _volume <= 0.0
+                ? Icons.volume_off
+                : _volume < 0.5
+                    ? Icons.volume_down
+                    : Icons.volume_up,
+            size: 16,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
+          Expanded(
+            child: Slider(
+              min: 0,
+              max: 1,
+              value: _volume,
+              onChanged: (v) => setState(() => _volume = v),
+            ),
+          ),
+          IconButton(
+            key: const Key('nowPlaying.castButton'),
+            visualDensity: VisualDensity.compact,
+            icon: Icon(isRemote ? Icons.cast_connected : Icons.cast, size: 18),
+            tooltip: 'Cast',
+            onPressed: () => CastSheet.show(context),
+          ),
+          IconButton(
+            key: const Key('nowPlaying.queueButton'),
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.queue_music, size: 18),
+            tooltip: 'Queue',
+            onPressed: () => Navigator.of(context).pushNamed('/queue'),
+          ),
         ],
       ),
     );

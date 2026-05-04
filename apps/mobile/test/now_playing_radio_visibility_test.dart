@@ -65,8 +65,11 @@ void main() {
   testWidgets('active session: both render', (tester) async {
     // The _PlayerView Column needs more vertical room than the default
     // 600 px test viewport. Use a phone-sized surface so everything lays
-    // out without overflow assertions.
-    await tester.binding.setSurfaceSize(const Size(390, 844));
+    // out without overflow assertions. Slice-10b grew the column by the
+    // wireframe-spec bottom utility row (volume / cast / queue) plus
+    // a long-press affordance on the title; we bumped the height to
+    // accommodate both.
+    await tester.binding.setSurfaceSize(const Size(390, 950));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     final fakeSession = RadioSession(

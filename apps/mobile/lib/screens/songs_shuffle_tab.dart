@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_core/core.dart';
-import 'package:prism_playlist_engine/playlist_engine.dart' show SteerChip;
+import 'package:prism_playlist_engine/playlist_engine.dart' show TrackSeed;
 import 'package:prism_ui/ui.dart';
 
 import '../providers/playback_providers.dart';
 import '../providers/radio_providers.dart';
 import '../providers/songs_shuffle_providers.dart';
 import '../widgets/mood_chip_row.dart';
+import 'radio_context_sheet.dart';
 
-/// Slice 10 §2.2 — Library → Songs is now the iPod-shuffle surface.
+/// Slice 10 §2.2 — Library → Songs is the iPod-shuffle surface.
 /// Top: big Shuffle Play CTA + True Shuffle + Infinite toggles.
-/// Middle: multi-select mood chip row + tempo dropdown.
+/// Middle: a single-select mood chip row (consolidated with Home/Search
+/// — tap a chip to push `MoodResultsScreen` for that mood) + tempo
+/// dropdown.
 /// Bottom: live deck list. Tap a row to play from there; the rest of
 /// the visible deck loads as the queue tail.
 class SongsShuffleTab extends ConsumerStatefulWidget {
@@ -72,42 +75,9 @@ class _SongsShuffleTabState extends ConsumerState<SongsShuffleTab> {
           ),
         );
         // ignore: discarded_futures
-        ref.read(radioSessionProvider.notifier).startFromTrack(seed).then((_) {
-          // Pre-load the chip selection as initial steering.
-          final chips = state.chips;
-          for (final chip in chips) {
-            final steerChip = _toSteerChip(chip);
-            if (steerChip == null) continue;
-            // ignore: discarded_futures
-            ref
-                .read(radioSessionProvider.notifier)
-                .toggleChip(steerChip);
-          }
-        });
+        ref.read(radioSessionProvider.notifier).startFromTrack(seed);
       });
     });
-  }
-
-  /// Best-effort mapping from MoodChip → SteerChip for the radio
-  /// hand-off (spec §2.3 row 2 "currently-selected MoodChip set" as
-  /// initial steering vector). Maps the four chips that have a slice-5
-  /// equivalent; Focus has no exact SteerChip cousin — we leave it
-  /// unmapped, matching spec §2.3's "session captures the current
-  /// multi-select set as its initial steering vector" via the
-  /// chip-expression helper for chips that translate.
-  static SteerChip? _toSteerChip(MoodChip chip) {
-    switch (chip) {
-      case MoodChip.happy:
-        return SteerChip.happier;
-      case MoodChip.sad:
-        return SteerChip.sadder;
-      case MoodChip.chill:
-        return SteerChip.calmer;
-      case MoodChip.energetic:
-        return SteerChip.moreIntense;
-      case MoodChip.focus:
-        return null;
-    }
   }
 
   @override
@@ -156,26 +126,22 @@ class _SongsShuffleTabState extends ConsumerState<SongsShuffleTab> {
             ],
           ),
         ),
-        // "Steer by vibe" header + multi-select chip row.
+        // "Pick a vibe" header + single-select chip row. Consolidated
+        // with the Home/Search pattern: tapping a chip pushes
+        // `MoodResultsScreen` for that mood (default `MoodChipRow`
+        // controller is `single()`).
         Padding(
           padding:
               EdgeInsets.symmetric(horizontal: tokens.s4, vertical: tokens.s1),
           child: Text(
-            'Steer by vibe',
+            'Pick a vibe',
             style: scale.caption13.copyWith(
               fontWeight: FontWeight.w600,
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
         ),
-        MoodChipRow(
-          dim: state.trueShuffle,
-          controller: MoodChipController.multi(
-            initial: state.chips,
-            onChanged: (next) =>
-                ref.read(songsShuffleStateProvider.notifier).setChips(next),
-          ),
-        ),
+        const MoodChipRow(),
         // Tempo dropdown row.
         Padding(
           padding:
@@ -209,7 +175,8 @@ class _SongsShuffleTabState extends ConsumerState<SongsShuffleTab> {
                 padding: EdgeInsets.all(tokens.s6),
                 child: Center(
                   child: Text(
-                    'No tracks match — pick fewer chips or try True Shuffle.',
+                    'No tracks match — try a different tempo or '
+                    'turn on True Shuffle.',
                     style: scale.body16,
                     textAlign: TextAlign.center,
                   ),
@@ -253,6 +220,10 @@ class _SongsShuffleTabState extends ConsumerState<SongsShuffleTab> {
                       ? Text('${t.bpm!.toStringAsFixed(0)} bpm')
                       : null,
                   onTap: () => _playFromIndex(ref, deck, i),
+                  // Slice-10b: long-press a deck row to start radio
+                  // from that track. ShuffleTrack already carries the
+                  // engine `trackId`; no pathToId hop needed.
+                  onLongPress: () => _openRadioSheetForDeckRow(context, t),
                 );
               },
             ),
@@ -297,6 +268,24 @@ class _SongsShuffleTabState extends ConsumerState<SongsShuffleTab> {
     ref.read(queueProvider.notifier).loadContext(tracks, startIndex: i);
     // ignore: discarded_futures
     ref.read(playbackServiceProvider).play();
+  }
+
+  /// Slice-10b: long-press a deck row → open the radio context sheet
+  /// seeded from that track. [ShuffleTrack] already carries the cache
+  /// `trackId` (slice-4 invariant), so we skip the `pathToIdProvider`
+  /// hop the album/playlist/artist surfaces use.
+  Future<void> _openRadioSheetForDeckRow(
+    BuildContext context,
+    ShuffleTrack t,
+  ) async {
+    if (!context.mounted) return;
+    await RadioContextSheet.show(
+      context,
+      TrackSeed(
+        trackId: t.trackId,
+        title: t.title ?? _basename(t.path),
+      ),
+    );
   }
 
   static String _basename(String path) {

@@ -6,16 +6,22 @@ import 'package:prism_playlist_engine/playlist_engine.dart';
 import '../providers/radio_providers.dart';
 
 /// Material 3 modal bottom sheet for the long-press "Start radio
-/// from this ___" action.
+/// from this track" action.
 ///
-/// Used by:
-/// - `library_screen.dart`'s `_SongsList` long-press — adds a third
-///   tile to the existing Play Next / Add to Queue sheet (not this
-///   sheet directly; library opens the sheet inline).
-/// - `album_detail_screen.dart`'s album-cell long-press — opens the
-///   sheet directly with an [AlbumSeed].
-/// - `artist_detail_screen.dart`'s artist-cell long-press — opens
-///   the sheet directly with an [ArtistSeed].
+/// **Track-only.** Album / artist / cluster seeds are not surfaced
+/// through this sheet — radio is always seeded from a single track
+/// (album-radio / artist-radio entry points were removed because the
+/// "from this whole album" semantic confused users). The
+/// [RadioContextSheet.show] entry point asserts on non-[TrackSeed] in
+/// debug and returns early in release.
+///
+/// Used by every track-row surface that supports long-press:
+/// - `album_detail_screen.dart`'s tracklist `ListTile`s.
+/// - `playlist_detail_screen.dart`'s tracklist `ListTile`s.
+/// - `artist_detail_screen.dart`'s top-tracks `ListTile`s.
+/// - `songs_shuffle_tab.dart`'s deck rows.
+/// - `queue_screen.dart`'s history / now-playing / mutable rows.
+/// - `now_playing_screen.dart`'s title text.
 ///
 /// The sheet is single-tile by design: there's exactly one action,
 /// and tapping it starts radio + closes the sheet + shows the
@@ -24,13 +30,26 @@ import '../providers/radio_providers.dart';
 class RadioContextSheet {
   RadioContextSheet._();
 
-  /// Opens the sheet for [seed]. Tapping the tile delegates to the
-  /// matching `radioSessionProvider.notifier.startFrom*`, dismisses
-  /// the sheet, and shows a "Radio started" snackbar.
+  /// Opens the sheet for [seed]. Tapping the tile delegates to
+  /// `radioSessionProvider.notifier.startFromTrack`, dismisses the
+  /// sheet, and shows a "Radio started" snackbar.
   ///
-  /// Library long-press uses [seedTrack]; album/artist long-press
-  /// passes [AlbumSeed] / [ArtistSeed].
+  /// [seed] **must** be a [TrackSeed]. Album / artist / cluster seeds
+  /// trigger an `assert` in debug builds and a silent no-op in release
+  /// — the slice-5 `startFromAlbum` / `startFromArtist` entry points
+  /// on the notifier still exist (kept as dead code per the slice-5
+  /// invariant that the state machine is byte-identical), but the UI
+  /// no longer routes to them.
   static Future<void> show(BuildContext context, SeedRef seed) {
+    assert(
+      seed is TrackSeed,
+      'RadioContextSheet.show only supports TrackSeed; got '
+      '${seed.runtimeType}. Album / artist / cluster radio entry '
+      'points were removed.',
+    );
+    if (seed is! TrackSeed) {
+      return Future<void>.value();
+    }
     return showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -91,22 +110,15 @@ class RadioContextSheet {
         if (track == null) return;
         await notifier.startFromTrack(track);
       case AlbumSeed():
-        await notifier.startFromAlbum(
-          albumKey: seed.albumKey,
-          title: seed.title,
-        );
       case ArtistSeed():
-        await notifier.startFromArtist(
-          artist: seed.artist,
-          label: seed.label,
-        );
       case ClusterSeed():
-        // ClusterSeed never enters the long-press radio context sheet —
-        // clusters seed sessions through the slice-10 'Keep playing'
-        // flow at the end of an AI-Compose playlist. Treat as a no-op
-        // here; the kind labels below still render gracefully so a
-        // diagnostic surface re-using this sheet for a cluster won't
-        // crash.
+        // Non-track seeds never enter this sheet — the [show] guard
+        // already short-circuits before reaching here. Treated as a
+        // silent no-op for defence-in-depth: a future caller that
+        // forgets the assert won't crash, and the slice-5
+        // `startFromAlbum` / `startFromArtist` notifier entry points
+        // (kept as dead code per the byte-identical state-machine
+        // invariant) remain unwired.
         return;
     }
     if (context.mounted) _snack(context, 'Radio started');

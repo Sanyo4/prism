@@ -7,6 +7,7 @@ import 'package:prism_ui/ui.dart';
 import '../browse/artist_view.dart';
 import '../providers/metadata_providers.dart';
 import '../providers/playback_providers.dart';
+import '../providers/radio_providers.dart';
 import '../widgets/album_tile.dart';
 import 'album_detail_screen.dart';
 import 'radio_context_sheet.dart';
@@ -60,20 +61,17 @@ class _ArtistDetailBody extends ConsumerWidget {
       body: ListView(
         padding: EdgeInsets.all(tokens.s4),
         children: [
-          // Slice 5 — long-press the avatar / header strip to start
-          // radio from the artist seed.
-          GestureDetector(
-            onLongPress: () => RadioContextSheet.show(
-              context,
-              ArtistSeed(artist: artist.name, label: artist.name),
-            ),
-            child: Center(
-              child: CircleAvatar(
-                radius: 56,
-                child: Text(
-                  _initials(artist.name),
-                  style: scale.display20,
-                ),
+          // Slice-10b: radio is track-only — the avatar no longer
+          // long-presses into an artist-seed radio start. The
+          // GestureDetector wrapper would have been pointless without
+          // its handler so we drop it entirely; the bare avatar
+          // renders the same.
+          Center(
+            child: CircleAvatar(
+              radius: 56,
+              child: Text(
+                _initials(artist.name),
+                style: scale.display20,
               ),
             ),
           ),
@@ -118,6 +116,7 @@ class _ArtistDetailBody extends ConsumerWidget {
               title: Text(t.title ?? _basename(t.path)),
               subtitle: t.album == null ? null : Text(t.album!),
               onTap: () => _playOne(ref, t),
+              onLongPress: () => _openRadioSheetForTrack(context, ref, t),
             ),
         ],
       ),
@@ -128,6 +127,29 @@ class _ArtistDetailBody extends ConsumerWidget {
     ref.read(queueProvider.notifier).loadContext([t], startIndex: 0);
     // ignore: discarded_futures
     ref.read(playbackServiceProvider).play();
+  }
+
+  /// Slice-10b: long-press a track row → open the radio context sheet
+  /// seeded from this track. Resolves the cache-db row id via
+  /// [pathToIdProvider]; bails silently if the file hasn't been
+  /// ingested yet (mirrors the existing track-row pattern in
+  /// [album_detail_screen.dart] / [playlist_detail_screen.dart]).
+  Future<void> _openRadioSheetForTrack(
+    BuildContext context,
+    WidgetRef ref,
+    Track track,
+  ) async {
+    final pathToId = await ref.read(pathToIdProvider.future);
+    final id = pathToId[track.path];
+    if (id == null) return;
+    if (!context.mounted) return;
+    await RadioContextSheet.show(
+      context,
+      TrackSeed(
+        trackId: id,
+        title: track.title ?? _basename(track.path),
+      ),
+    );
   }
 
   static String _basename(String path) {

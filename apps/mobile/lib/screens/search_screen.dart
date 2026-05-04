@@ -11,6 +11,7 @@ import '../shell/app_shell.dart';
 import '../widgets/embedded_art.dart';
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
+import 'mood_results_screen.dart';
 
 /// Search — large display title, glass search field, and a 2-col
 /// "Browse by mood" tile grid.
@@ -123,13 +124,17 @@ class _MoodGrid extends StatelessWidget {
 
   // Six lightweight gradient tiles — names match the slice-4 mood
   // chips so tapping into Search → Mood lands on a familiar surface.
+  // The five tiles whose label maps to a [MoodChip] push the matching
+  // [MoodResultsScreen] on tap (consolidated with Home's chip-row push
+  // pattern). "Late Night" has no chip equivalent and falls back to
+  // [MoodChip.chill] — closest match for the slow / unwound vibe.
   static const _tiles = <_MoodTile>[
-    _MoodTile('Happy', Color(0xFFFFD8A8)),
-    _MoodTile('Chill', Color(0xFFB8D8FF)),
-    _MoodTile('Focus', Color(0xFFD8C8FF)),
-    _MoodTile('Energetic', Color(0xFFFFB8C8)),
-    _MoodTile('Sad', Color(0xFFC8D8E8)),
-    _MoodTile('Late Night', Color(0xFFB8B8E8)),
+    _MoodTile('Happy', Color(0xFFFFD8A8), MoodChip.happy),
+    _MoodTile('Chill', Color(0xFFB8D8FF), MoodChip.chill),
+    _MoodTile('Focus', Color(0xFFD8C8FF), MoodChip.focus),
+    _MoodTile('Energetic', Color(0xFFFFB8C8), MoodChip.energetic),
+    _MoodTile('Sad', Color(0xFFC8D8E8), MoodChip.sad),
+    _MoodTile('Late Night', Color(0xFFB8B8E8), MoodChip.chill),
   ];
 
   @override
@@ -142,21 +147,37 @@ class _MoodGrid extends StatelessWidget {
       childAspectRatio: 2.4,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      children: _tiles.map((t) => _MoodCard(tile: t)).toList(),
+      children: _tiles
+          .map((t) => _MoodCard(
+                tile: t,
+                onTap: () => Navigator.of(context).push(
+                  MoodResultsScreen.route(t.chip),
+                ),
+              ))
+          .toList(),
     );
   }
 }
 
 class _MoodTile {
-  const _MoodTile(this.label, this.color);
+  const _MoodTile(this.label, this.color, this.chip);
   final String label;
   final Color color;
+
+  /// `MoodChip` to push when this tile is tapped — drives the
+  /// [MoodResultsScreen] navigation (consolidated with Home).
+  final MoodChip chip;
 }
 
 class _MoodCard extends StatelessWidget {
-  const _MoodCard({required this.tile});
+  const _MoodCard({required this.tile, this.onTap});
 
   final _MoodTile tile;
+
+  /// Tap handler. Set by [_MoodGrid] to push [MoodResultsScreen] for
+  /// the tile's mood. Wrapped in [InkWell] so the gradient + glass
+  /// styling underneath is preserved.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -184,33 +205,39 @@ class _MoodCard extends StatelessWidget {
             width: 1,
           ),
         ),
-        child: Stack(
-          children: [
-            // Glow blob in the bottom-right corner.
-            Positioned(
-              right: -10,
-              bottom: -10,
-              child: Container(
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.5),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            child: Stack(
+              children: [
+                // Glow blob in the bottom-right corner.
+                Positioned(
+                  right: -10,
+                  bottom: -10,
+                  child: Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.5),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Text(
-                tile.label,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1A2540),
+                Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Text(
+                    tile.label,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1A2540),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

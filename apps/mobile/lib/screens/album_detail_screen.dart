@@ -103,13 +103,13 @@ class _AlbumDetailBody extends ConsumerWidget {
                   background: Stack(
                     fit: StackFit.expand,
                     children: [
+                      // Slice-10b: radio is track-only — the hero no
+                      // longer carries an album-seed long-press. The
+                      // GestureDetector wrapper is retained as a stable
+                      // hit-test parent for the Hero so future tap /
+                      // pan gestures (e.g. drag-to-dismiss) have a
+                      // home.
                       GestureDetector(
-                        // Slice 5 — long-press the hero to start radio from
-                        // the album seed.
-                        onLongPress: () => RadioContextSheet.show(
-                          context,
-                          AlbumSeed(albumKey: album.id, title: album.title),
-                        ),
                         child: Hero(
                           tag: HeroTags.art(album.id),
                           flightShuttleBuilder: _flightShuttleBuilder,
@@ -160,16 +160,12 @@ class _AlbumDetailBody extends ConsumerWidget {
                 ),
               ),
               SliverToBoxAdapter(
-                child: GestureDetector(
-                  // Long-press the metadata strip too — slice 5 spec
-                  // names "long-press the album cell". The hero IS the
-                  // cell on the detail screen; this is the secondary
-                  // affordance for users who scroll past the hero.
-                  onLongPress: () => RadioContextSheet.show(
-                    context,
-                    AlbumSeed(albumKey: album.id, title: album.title),
-                  ),
-                  child: Padding(
+                // Slice-10b: radio is track-only. The metadata strip
+                // used to long-press into an AlbumSeed radio start;
+                // the entry point was removed so users only see the
+                // radio sheet from a *track* row. The Glass card's
+                // contents are unchanged.
+                child: Padding(
                     padding: EdgeInsets.fromLTRB(
                       tokens.s4,
                       tokens.s4,
@@ -220,7 +216,6 @@ class _AlbumDetailBody extends ConsumerWidget {
                     ),
                   ),
                 ),
-              ),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.symmetric(
