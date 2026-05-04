@@ -292,6 +292,30 @@ final backfillKickoffProvider = Provider<void>((ref) {
   });
 });
 
+// --- Backfill progress (slice-10b §C1) --------------------------------
+
+/// Slice-10b §C1 — exposes BackfillQueue's progress stream so the
+/// Settings → Online Metadata card can render live progress.
+/// Emits `null` when no run is active (queue not yet ready, or
+/// between runs).
+final backfillProgressProvider =
+    StreamProvider<BackfillProgress?>((ref) async* {
+  final queue = ref.watch(backfillQueueProvider);
+  if (queue == null) {
+    yield null;
+    return;
+  }
+  // Re-emit `null` between runs so the card auto-dismisses.
+  yield null;
+  await for (final progress in queue.progressStream) {
+    yield progress;
+    if (progress.isDone) {
+      // After the done event, emit null so the card animates out.
+      yield null;
+    }
+  }
+});
+
 // --- Per-MBID artist info (Last.fm bio + tags) --------------------------
 
 final artistInfoProvider =

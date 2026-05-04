@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_ui/ui.dart';
 
 import '../providers/metadata_providers.dart';
+import '../widgets/backfill_progress_card.dart';
 import 'settings_sections.dart';
 
 /// Settings → "Online Metadata" section. Three controls:
@@ -52,6 +53,7 @@ class SettingsOnlineMetadataSection extends ConsumerWidget {
           value: settings.enabled,
           onChanged: (v) => notifier.setEnabled(v),
         ),
+        const BackfillProgressCard(),
         ListTile(
           title: const Text('Contact email'),
           subtitle: Text(settings.contactEmail.isEmpty

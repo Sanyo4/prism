@@ -5,6 +5,31 @@ import 'package:prism_metadata/metadata.dart';
 
 import 'track_patch.dart';
 
+/// Snapshot of backfill progress emitted on [BackfillQueue.progressStream].
+class BackfillProgress {
+  /// Total tracks queued at the start of the run. Set when [BackfillQueue.run]
+  /// begins; doesn't shift as the queue drains.
+  final int total;
+
+  /// Tracks completed so far (success OR error — both count toward progress).
+  final int processed;
+
+  /// Title of the track currently being enriched. Null between patches.
+  final String? currentTrackTitle;
+
+  const BackfillProgress({
+    required this.total,
+    required this.processed,
+    this.currentTrackTitle,
+  });
+
+  /// Fraction of completion in [0.0, 1.0]. Returns 0.0 when [total] is zero.
+  double get fraction => total <= 0 ? 0.0 : processed / total;
+
+  /// True when all tracks have been processed.
+  bool get isDone => processed >= total;
+}
+
 /// Lifetime-controllable queue runner. Listens to ScanDone events,
 /// then iterates tagless tracks one at a time through
 /// [MetadataRepository.backfill]. Patches it produces flow out via
@@ -32,15 +57,26 @@ class BackfillQueue {
   final MetadataRepository _repo;
   final StreamController<TrackPatch> _out =
       StreamController<TrackPatch>.broadcast();
+  final StreamController<BackfillProgress> _progressController =
+      StreamController<BackfillProgress>.broadcast();
 
   bool _stopped = false;
   Future<void>? _running;
+  int _total = 0;
+  int _processed = 0;
 
   BackfillQueue({required MetadataRepository repo}) : _repo = repo;
 
   /// Patch stream consumed by the merger provider. Broadcast so widget
   /// tests can observe without consuming the only listener.
   Stream<TrackPatch> get stream => _out.stream;
+
+  /// Progress stream consumed by [backfillProgressProvider]. Emits a
+  /// [BackfillProgress] snapshot before and after each track is processed.
+  /// On completion (or stop), emits a final snapshot with
+  /// `processed == total` so consumers can detect completion via
+  /// [BackfillProgress.isDone].
+  Stream<BackfillProgress> get progressStream => _progressController.stream;
 
   /// Whether the queue is currently running through a list of tracks.
   /// Surfaced for tests; widget code rarely needs this.
@@ -61,11 +97,29 @@ class BackfillQueue {
     _stopped = false;
     final completer = Completer<void>();
     _running = completer.future;
+    // Count eligible tracks (non-fully-tagged) for an accurate total.
+    final eligible =
+        tracks.where((t) => !_isFullyTagged(t)).toList(growable: false);
+    _total = eligible.length;
+    _processed = 0;
+    _progressController.add(
+      BackfillProgress(total: _total, processed: 0),
+    );
     try {
       for (final t in tracks) {
         if (_stopped) break;
         if (!_repo.configured) break;
         if (_isFullyTagged(t)) continue;
+
+        // Emit before the network call so the UI shows which track is
+        // currently being enriched.
+        _progressController.add(
+          BackfillProgress(
+            total: _total,
+            processed: _processed,
+            currentTrackTitle: t.title ?? t.path,
+          ),
+        );
 
         TrackMetadataPatch patch;
         try {
@@ -73,13 +127,27 @@ class BackfillQueue {
         } on Exception {
           // Repository persists `last_error` already; we just skip and
           // let the next launch retry up to attempt_count == 3.
+          _processed++;
+          _progressController.add(
+            BackfillProgress(total: _total, processed: _processed),
+          );
           continue;
         }
+
+        _processed++;
+        _progressController.add(
+          BackfillProgress(total: _total, processed: _processed),
+        );
 
         if (patch.isEmpty) continue;
         _out.add(TrackPatch(path: t.path, patch: patch));
       }
     } finally {
+      // Emit a terminal snapshot so isDone is true regardless of
+      // whether the run completed or was stopped early.
+      _progressController.add(
+        BackfillProgress(total: _total, processed: _total),
+      );
       completer.complete();
       _running = null;
     }
@@ -94,6 +162,7 @@ class BackfillQueue {
   Future<void> dispose() async {
     stop();
     await _out.close();
+    await _progressController.close();
   }
 
   /// "Fully tagged" — the three fields the slice-2 verification matrix
