@@ -12,6 +12,7 @@ import '../screens/artist_detail_screen.dart';
 import 'album_tile.dart';
 import 'artist_tile.dart';
 import 'refresh_icon_button.dart';
+import 'responsive_columns.dart';
 
 /// Slice 10 §2.1 — Discover albums grid lifted from the retired
 /// `RandomTab`. 2x3 grid, independent reseed via the grid's own
@@ -138,22 +139,32 @@ class _AlbumTiles extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<SpaceTokens>()!;
-    return GridView.count(
-      crossAxisCount: 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: tokens.s3,
-      crossAxisSpacing: tokens.s3,
-      childAspectRatio: 0.75,
-      children: [
-        for (final a in albums)
-          AlbumTile(
-            album: a,
-            onTap: () => Navigator.of(context).push(
-              AlbumDetailScreen.route(a.id),
-            ),
-          ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cols = columnsForWidth(
+          constraints.maxWidth,
+          targetTileWidth: 180,
+          min: 3,
+          max: 4,
+        );
+        return GridView.count(
+          crossAxisCount: cols,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: tokens.s3,
+          crossAxisSpacing: tokens.s3,
+          childAspectRatio: 0.75,
+          children: [
+            for (final a in albums)
+              AlbumTile(
+                album: a,
+                onTap: () => Navigator.of(context).push(
+                  AlbumDetailScreen.route(a.id),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -164,22 +175,32 @@ class _ArtistTiles extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<SpaceTokens>()!;
-    return GridView.count(
-      crossAxisCount: 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: tokens.s3,
-      crossAxisSpacing: tokens.s3,
-      childAspectRatio: 0.78,
-      children: [
-        for (final a in artists)
-          ArtistTile(
-            artist: a,
-            onTap: () => Navigator.of(context).push(
-              ArtistDetailScreen.route(a.id),
-            ),
-          ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cols = columnsForWidth(
+          constraints.maxWidth,
+          targetTileWidth: 110,
+          min: 3,
+          max: 5,
+        );
+        return GridView.count(
+          crossAxisCount: cols,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: tokens.s3,
+          crossAxisSpacing: tokens.s3,
+          childAspectRatio: 0.78,
+          children: [
+            for (final a in artists)
+              ArtistTile(
+                artist: a,
+                onTap: () => Navigator.of(context).push(
+                  ArtistDetailScreen.route(a.id),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

@@ -11,6 +11,7 @@ import '../shell/app_shell.dart';
 import '../widgets/album_tile.dart';
 import '../widgets/artist_tile.dart';
 import '../widgets/library_filter_sheet.dart';
+import '../widgets/responsive_columns.dart';
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
 import 'songs_shuffle_tab.dart';
@@ -204,22 +205,32 @@ class _AlbumsTab extends ConsumerWidget {
             },
           );
         }
-        return GridView.builder(
-          padding: EdgeInsets.all(tokens.s4),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: tokens.s4,
-            crossAxisSpacing: tokens.s4,
-            childAspectRatio: 0.8,
-          ),
-          itemCount: albums.length,
-          itemBuilder: (context, i) {
-            final a = albums[i];
-            return AlbumTile(
-              album: a,
-              onTap: () => Navigator.of(context).push(
-                AlbumDetailScreen.route(a.id),
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final cols = columnsForWidth(
+              constraints.maxWidth,
+              targetTileWidth: 180,
+              min: 2,
+              max: 6,
+            );
+            return GridView.builder(
+              padding: EdgeInsets.all(tokens.s4),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: cols,
+                mainAxisSpacing: tokens.s4,
+                crossAxisSpacing: tokens.s4,
+                childAspectRatio: 0.8,
               ),
+              itemCount: albums.length,
+              itemBuilder: (context, i) {
+                final a = albums[i];
+                return AlbumTile(
+                  album: a,
+                  onTap: () => Navigator.of(context).push(
+                    AlbumDetailScreen.route(a.id),
+                  ),
+                );
+              },
             );
           },
         );
@@ -261,22 +272,32 @@ class _ArtistsTab extends ConsumerWidget {
             },
           );
         }
-        return GridView.builder(
-          padding: EdgeInsets.all(tokens.s4),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            mainAxisSpacing: tokens.s4,
-            crossAxisSpacing: tokens.s4,
-            childAspectRatio: 0.78,
-          ),
-          itemCount: artists.length,
-          itemBuilder: (context, i) {
-            final a = artists[i];
-            return ArtistTile(
-              artist: a,
-              onTap: () => Navigator.of(context).push(
-                ArtistDetailScreen.route(a.id),
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final cols = columnsForWidth(
+              constraints.maxWidth,
+              targetTileWidth: 110,
+              min: 3,
+              max: 8,
+            );
+            return GridView.builder(
+              padding: EdgeInsets.all(tokens.s4),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: cols,
+                mainAxisSpacing: tokens.s4,
+                crossAxisSpacing: tokens.s4,
+                childAspectRatio: 0.78,
               ),
+              itemCount: artists.length,
+              itemBuilder: (context, i) {
+                final a = artists[i];
+                return ArtistTile(
+                  artist: a,
+                  onTap: () => Navigator.of(context).push(
+                    ArtistDetailScreen.route(a.id),
+                  ),
+                );
+              },
             );
           },
         );
