@@ -28,7 +28,10 @@
 ///      appends one more.
 library;
 
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:meta/meta.dart';
 // `prism_core` and `prism_playlist_engine` both export a `KnnHit` —
 // the engine's is the one we use here; hide the core symbol so we
 // don't ambiguous-import it.
@@ -115,7 +118,10 @@ typedef TrackByIdLookup = Track? Function(int);
 /// rebuild (i.e. when the cache db handle changes or
 /// `trackWithPatchProvider` re-emits) keeps the id space in sync
 /// with what the ingest coordinator wrote.
-final _idToPathProvider = FutureProvider<Map<int, String>>((ref) async {
+///
+/// Promoted from `_idToPathProvider` in slice 10 to expose a testing
+/// seam for [RadioSessionNotifier.buildClusterSession].
+final idToPathProvider = FutureProvider<Map<int, String>>((ref) async {
   final cache = await ref.watch(cacheDbProvider.future);
   final rows = await cache.writer.rawQuery(
     "SELECT id, path FROM tracks WHERE status = 'ready'",
@@ -132,7 +138,7 @@ final _idToPathProvider = FutureProvider<Map<int, String>>((ref) async {
 /// reassigned ids).
 final trackByIdLookupProvider = Provider<TrackByIdLookup>((ref) {
   final mergedAsync = ref.watch(trackWithPatchProvider);
-  final idMapAsync = ref.watch(_idToPathProvider);
+  final idMapAsync = ref.watch(idToPathProvider);
   final tracks = mergedAsync.asData?.value.tracks ?? const <Track>[];
   final idToPath = idMapAsync.asData?.value ?? const <int, String>{};
   final byPath = <String, Track>{for (final t in tracks) t.path: t};
@@ -144,11 +150,12 @@ final trackByIdLookupProvider = Provider<TrackByIdLookup>((ref) {
 });
 
 /// Inverse map — `path → tracks.id` — used by
-/// [RadioSessionNotifier.startFromTrack] to resolve a `Track`'s
+/// [RadioSessionNotifier.startFromTrack] and
+/// [RadioSessionNotifier.buildClusterSession] to resolve a `Track`'s
 /// engine-id at session boot. Built lazily off the same source as
-/// [_idToPathProvider] so the two stay consistent.
-final _pathToIdProvider = FutureProvider<Map<String, int>>((ref) async {
-  final idMap = await ref.watch(_idToPathProvider.future);
+/// [idToPathProvider] so the two stay consistent.
+final pathToIdProvider = FutureProvider<Map<String, int>>((ref) async {
+  final idMap = await ref.watch(idToPathProvider.future);
   return {
     for (final entry in idMap.entries) entry.value: entry.key,
   };
@@ -205,7 +212,7 @@ class RadioSessionNotifier extends Notifier<RadioSession?> {
 
   Future<void> startFromTrack(Track track) async {
     final repo = await ref.read(playlistRepoProvider.future);
-    final pathToId = await ref.read(_pathToIdProvider.future);
+    final pathToId = await ref.read(pathToIdProvider.future);
     final id = pathToId[track.path];
     if (id == null) {
       // No cache row for this path — track hasn't been ingested yet
@@ -269,6 +276,73 @@ class RadioSessionNotifier extends Notifier<RadioSession?> {
         kind: 'artist',
         ref: artist,
         label: label,
+        lastUsedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  /// Public for testing — constructs the session without booting the
+  /// lookahead manager. Returns `null` when zero tracks resolve to an
+  /// embedding (slice 10 §7 risk 5: empty-cluster fallback).
+  @visibleForTesting
+  Future<RadioSession?> buildClusterSession(
+    List<Track> tracks, {
+    String? steeringHint,
+  }) async {
+    if (tracks.isEmpty) return null;
+    final repo = await ref.read(playlistRepoProvider.future);
+    final pathToId = await ref.read(pathToIdProvider.future);
+    final ids = <int>[];
+    final vectors = <Float32List>[];
+    for (final t in tracks) {
+      final id = pathToId[t.path];
+      if (id == null) continue;
+      try {
+        final v = await repo.embeddingOf(id);
+        ids.add(id);
+        vectors.add(v);
+      } catch (_) {
+        // Embedding row missing or wrong length — skip and try the
+        // next. Slice-5 risk 8 already surfaces dimension drift via
+        // ArgumentError; we swallow it here because skipping one track
+        // is preferable to blowing up the cluster boot.
+      }
+    }
+    final seedEmbedding = RadioEngine.averageEmbeddings(vectors);
+    if (seedEmbedding == null) return null;
+    final label = steeringHint ?? 'Cluster (${ids.length})';
+    return RadioSession(
+      seed: ClusterSeed(
+        trackIds: List<int>.unmodifiable(ids),
+        label: label,
+        steeringHint: steeringHint,
+      ),
+      seedEmbedding: seedEmbedding,
+    );
+  }
+
+  /// Slice 10 §2.3 — third radio entry point. Treats [tracks] as a
+  /// synthetic cluster, averages their embeddings, and feeds the result
+  /// through the same kNN entry as the slice-5 paths.
+  ///
+  /// Tracks whose path doesn't resolve to a `tracks.id` are skipped.
+  /// When ZERO resolve, the call short-circuits with no state change —
+  /// the end-of-playlist sheet's "Can't extend this playlist yet" copy
+  /// is the surface that explains this to the user.
+  Future<void> startFromCluster(
+    List<Track> tracks, {
+    String? steeringHint,
+  }) async {
+    final session =
+        await buildClusterSession(tracks, steeringHint: steeringHint);
+    if (session == null) return;
+    final cluster = session.seed as ClusterSeed;
+    await _bootSession(
+      session,
+      RecentSeedEntry(
+        kind: 'cluster',
+        ref: cluster.trackIds.join(','),
+        label: cluster.label,
         lastUsedAt: DateTime.now(),
       ),
     );

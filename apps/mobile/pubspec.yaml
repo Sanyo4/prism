@@ -41,6 +41,10 @@ dependencies:
   # (`Platform.isAndroid` gate inside `cast_sheet.dart`).
   prism_cast: any
 
+  # Slice 10 — @visibleForTesting on buildClusterSession. meta is a
+  # transitive dep of flutter but linter requires an explicit entry.
+  meta: any
+
   # Direct runtime deps (tight surface for slice 1)
   just_audio: ^0.10.5
   audio_service: ^0.18.18
