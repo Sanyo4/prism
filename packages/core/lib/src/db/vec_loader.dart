@@ -23,7 +23,8 @@ const String _kVec0Symbol = 'sqlite3_vec_init';
 /// which is what makes `CREATE VIRTUAL TABLE … USING vec0` work
 /// inside an sqflite transaction.
 ///
-/// On failure the function throws — `CacheDb.open` catches and
+/// On failure [ensureLoaded] sets [Vec0Loader.loadFailed] and
+/// [Vec0Loader.loadFailureMessage] without throwing, so the app
 /// degrades into "no embeddings" mode (slice-4 §10 risk 3).
 class Vec0Loader {
   Vec0Loader._();
@@ -35,19 +36,46 @@ class Vec0Loader {
   /// call. Surfaced by `CacheDb.diagnostic` for Settings rendering.
   static String? get loadedFrom => _loadedFrom;
 
+  /// Whether the most-recent `ensureLoaded` call failed. When true,
+  /// callers should skip vec0 DDL (the migrations) and skip kNN code
+  /// paths (PlaylistRepoImpl). The app continues with mood + vibe +
+  /// library functionality; only radio is unavailable.
+  static bool loadFailed = false;
+
+  /// Diagnostic message from the most-recent failure. Surfaced in the
+  /// Settings cache-stats area so the user understands why radio is
+  /// unavailable.
+  static String? loadFailureMessage;
+
   /// Idempotent registration of the vec0 entry point with the
   /// process-wide sqlite3 instance. After this returns, every
   /// `sqlite3.open(...)` will have vec0 available.
   ///
   /// [vec0Path] must point to the platform-correct `vec0.so`. Pass
   /// the result of [resolvePath] (or a test-injected path).
+  ///
+  /// On failure the function sets [loadFailed] = true and
+  /// [loadFailureMessage] to the error description, then returns
+  /// without throwing — callers degrade into "no embeddings" mode
+  /// (slice-4 §10 risk 3).
   static void ensureLoaded(String vec0Path) {
-    if (_loadedFrom == vec0Path) return;
-    final lib = DynamicLibrary.open(vec0Path);
-    sqlite3.ensureExtensionLoaded(
-      SqliteExtension.inLibrary(lib, _kVec0Symbol),
-    );
-    _loadedFrom = vec0Path;
+    // If already loaded successfully from this path, nothing to do.
+    if (_loadedFrom == vec0Path && !loadFailed) return;
+    // If attempting a new path (possibly after a previous failure),
+    // reset state and retry.
+    try {
+      final lib = DynamicLibrary.open(vec0Path);
+      sqlite3.ensureExtensionLoaded(
+        SqliteExtension.inLibrary(lib, _kVec0Symbol),
+      );
+      _loadedFrom = vec0Path;
+      loadFailed = false;
+      loadFailureMessage = null;
+    } catch (e) {
+      loadFailed = true;
+      loadFailureMessage = e.toString();
+      // Do NOT rethrow — degraded-mode continues without vec0.
+    }
   }
 
   /// Resolves the right `vec0.so` path for the current platform.

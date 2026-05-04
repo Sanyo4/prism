@@ -42,6 +42,19 @@ class SettingsLibrarySection extends ConsumerWidget {
               : () =>
                   ref.read(ingestControllerProvider.notifier).rescan(),
         ),
+        if (Vec0Loader.loadFailed)
+          ListTile(
+            leading: Icon(
+              Icons.info_outline,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            title: const Text('Embeddings disabled — radio unavailable on this device'),
+            subtitle: Text(
+              (Vec0Loader.loadFailureMessage ?? '').length > 120
+                  ? '${(Vec0Loader.loadFailureMessage ?? '').substring(0, 120)}…'
+                  : (Vec0Loader.loadFailureMessage ?? ''),
+            ),
+          ),
         stats.when(
           loading: () => const ListTile(
             leading: Icon(Icons.analytics_outlined),

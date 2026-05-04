@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:prism_playlist_engine/playlist_engine.dart' as engine;
 
 import 'cache_db.dart';
+import 'vec_loader.dart';
 
 /// `CacheDb`-backed implementation of [engine.PlaylistRepo]. The
 /// only file in `packages/core` that bridges the pure-Dart engine
@@ -28,9 +29,16 @@ class PlaylistRepoImpl implements engine.PlaylistRepo {
   /// `track_embeddings.embedding` for [trackId]. Throws
   /// [ArgumentError] when the blob is not exactly 5120 bytes
   /// (slice 5 §10 risk 8 — guards against future analyzer drift to
-  /// 768 dims). Throws [StateError] when no row exists.
+  /// 768 dims). Throws [StateError] when no row exists or when
+  /// [Vec0Loader.loadFailed] is true (degraded mode).
   @override
   Future<Float32List> embeddingOf(int trackId) async {
+    if (Vec0Loader.loadFailed) {
+      throw StateError(
+        'Embeddings unavailable — vec0 load failed: '
+        '${Vec0Loader.loadFailureMessage}',
+      );
+    }
     final rows = _db.reader.select(
       'SELECT embedding FROM track_embeddings WHERE track_id = ?',
       [trackId],
@@ -49,9 +57,11 @@ class PlaylistRepoImpl implements engine.PlaylistRepo {
 
   /// L2-normalized mean of every `status='ready'` embedding whose
   /// row's `album` column equals [albumKey]. `null` when no such
-  /// rows exist (album with no analysed tracks — §10 risk 6).
+  /// rows exist (album with no analysed tracks — §10 risk 6), or
+  /// when [Vec0Loader.loadFailed] is true (degraded mode).
   @override
   Future<Float32List?> meanEmbeddingForAlbum(String albumKey) async {
+    if (Vec0Loader.loadFailed) return null;
     final ids = await _db.writer.rawQuery(
       'SELECT id FROM tracks '
       "WHERE status = 'ready' AND album = ?",
@@ -64,9 +74,10 @@ class PlaylistRepoImpl implements engine.PlaylistRepo {
 
   /// L2-normalized mean of every `status='ready'` embedding whose
   /// row's `artist` column equals [artist]. `null` when no rows
-  /// match.
+  /// match, or when [Vec0Loader.loadFailed] is true (degraded mode).
   @override
   Future<Float32List?> meanEmbeddingForArtist(String artist) async {
+    if (Vec0Loader.loadFailed) return null;
     final ids = await _db.writer.rawQuery(
       'SELECT id FROM tracks '
       "WHERE status = 'ready' AND artist = ?",
@@ -79,12 +90,14 @@ class PlaylistRepoImpl implements engine.PlaylistRepo {
 
   /// vec0 kNN against [seed], joined to `tracks` for the
   /// `status='ready'` filter. Returns up to [k] hits ascending by
-  /// L2 distance.
+  /// L2 distance, or an empty list when [Vec0Loader.loadFailed] is
+  /// true (degraded mode — radio unavailable).
   @override
   Future<List<engine.KnnHit>> knnByEmbedding(
     Float32List seed, {
     int k = 200,
   }) async {
+    if (Vec0Loader.loadFailed) return <engine.KnnHit>[];
     final blob = _encodeEmbedding(seed);
     final hits = _db.reader.select(
       '''

@@ -45,6 +45,14 @@ class CacheDb {
   /// Idempotent: opening twice on the same path returns two
   /// independent `CacheDb` instances; the second `Vec0Loader.ensureLoaded`
   /// call is a no-op.
+  ///
+  /// **Degraded mode (slice-10b §A1):** If [Vec0Loader.ensureLoaded]
+  /// fails (e.g. 16 KB page-size kernel rejecting 4 KB-aligned `.so`),
+  /// `open` no longer throws. Instead [Vec0Loader.loadFailed] is set to
+  /// `true` and the `track_embeddings` virtual table is omitted from the
+  /// v1 migration. Mood, vibe, and library queries continue to work;
+  /// kNN radio is unavailable. Check [Vec0Loader.loadFailed] and
+  /// [Vec0Loader.loadFailureMessage] to surface this in Settings.
   static Future<CacheDb> open({
     required DatabaseFactory factory,
     required String path,

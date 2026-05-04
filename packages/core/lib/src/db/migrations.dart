@@ -1,5 +1,7 @@
 import 'package:sqflite_common/sqflite.dart';
 
+import 'vec_loader.dart';
+
 /// Linear schema migrations for `cache.db`. Slice 4 ships v1; later
 /// slices append numbered steps without rewriting old ones.
 ///
@@ -92,15 +94,28 @@ class Migrations {
     await txn.execute('CREATE INDEX tracks_mood_party   ON tracks(mood_party)');
     await txn.execute('CREATE INDEX tracks_bpm          ON tracks(bpm)');
 
-    // The vec0 virtual table goes here too; vec0 must be loaded into
-    // the FFI handle (and registered process-wide via
-    // sqlite3.ensureExtensionLoaded) *before* this DDL runs. CacheDb
-    // sequences that for us.
-    await txn.execute('''
-      CREATE VIRTUAL TABLE track_embeddings USING vec0(
-        track_id  INTEGER PRIMARY KEY,
-        embedding FLOAT[1280]
-      )
-    ''');
+    // Slice-10b §A1 — skip vec0 DDL when the shared library failed to
+    // load; the table can be created on a subsequent open once the
+    // binary is repaired (Task A2).
+    if (Vec0Loader.loadFailed) {
+      // ignore: avoid_print
+      print(
+        '[Migrations._v1] vec0 load failed — skipping track_embeddings DDL. '
+        'Reason: ${Vec0Loader.loadFailureMessage}',
+      );
+    } else {
+      await createVec0Table(txn);
+    }
   }
+}
+
+/// Slice-10b §A1 — vec0 virtual-table DDL is split out so that
+/// `_v1` can skip it gracefully when `Vec0Loader.loadFailed == true`.
+Future<void> createVec0Table(DatabaseExecutor txn) async {
+  await txn.execute('''
+    CREATE VIRTUAL TABLE track_embeddings USING vec0(
+      track_id  INTEGER PRIMARY KEY,
+      embedding FLOAT[1280]
+    )
+  ''');
 }
