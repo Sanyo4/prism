@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:prism_core/core.dart' show PlaylistRecord;
 import 'package:prism_ui/ui.dart';
 
 import '../browse/album_view.dart';
 import '../browse/artist_view.dart';
+import '../providers/cache_db_providers.dart';
 import '../providers/cast_providers.dart';
 import '../providers/library_view_prefs.dart';
 import '../providers/metadata_providers.dart';
+import '../providers/playlists_provider.dart';
 import '../shell/app_shell.dart';
 import '../widgets/album_tile.dart';
 import '../widgets/artist_tile.dart';
@@ -14,6 +17,7 @@ import '../widgets/library_filter_sheet.dart';
 import '../widgets/responsive_columns.dart';
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
+import 'playlist_detail_screen.dart';
 import 'songs_shuffle_tab.dart';
 
 /// 4-tab Library surface — Albums / Artists / Playlists / Songs.
@@ -55,7 +59,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   void _onTabChange() {
-    final controller = DefaultTabController.of(context);
+    // Use maybeOf so this is safe if called after the DefaultTabController
+    // has been removed from the tree (e.g. during widget test teardown).
+    final controller = DefaultTabController.maybeOf(context);
+    if (controller == null) return;
     if (controller.indexIsChanging) {
       // Spec §7 risk 11 — dismiss any open sheet when the tab changes.
       Navigator.of(context, rootNavigator: true).maybePop();
@@ -306,41 +313,149 @@ class _ArtistsTab extends ConsumerWidget {
   }
 }
 
-class _PlaylistsTab extends StatelessWidget {
+class _PlaylistsTab extends ConsumerWidget {
   const _PlaylistsTab();
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final tokens = Theme.of(context).extension<SpaceTokens>()!;
-    final scale = Theme.of(context).extension<TypographyScale>()!;
-    return Center(
-      child: Card(
-        margin: EdgeInsets.all(tokens.s6),
-        child: Padding(
-          padding: EdgeInsets.all(tokens.s6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.queue_music_outlined,
-                size: 48,
-                color: theme.colorScheme.onSurfaceVariant,
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
+    final playlistsAsync = ref.watch(playlistsProvider);
+    final prefs = ref.watch(libraryViewPrefsSyncProvider);
+
+    return playlistsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Playlists error: $e')),
+      data: (playlists) {
+        if (playlists.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: EdgeInsets.all(tokens.s6),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.auto_awesome_outlined,
+                    size: 48,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  SizedBox(height: tokens.s4),
+                  Text(
+                    'No playlists yet.',
+                    style: scale.display20,
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: tokens.s2),
+                  Text(
+                    'Compose one in the Create tab — it lands here when you tap Play.',
+                    style: scale.body16.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
-              SizedBox(height: tokens.s4),
-              Text('Coming in slice 6', style: scale.display20),
-              SizedBox(height: tokens.s2),
-              Text(
-                'Vibe-driven and saved playlists ship alongside the on-device LLM.',
-                textAlign: TextAlign.center,
-                style: scale.body16.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
+            ),
+          );
+        }
+
+        // Apply LibraryViewPrefs.playlistSort.
+        final sorted = List<PlaylistRecord>.of(playlists);
+        switch (prefs.playlistSort) {
+          case PlaylistSort.createdDesc:
+            sorted.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          case PlaylistSort.name:
+            sorted.sort((a, b) =>
+                a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+        }
+
+        return ListView.separated(
+          padding: EdgeInsets.fromLTRB(
+              tokens.s4, tokens.s2, tokens.s4, tokens.s8),
+          itemCount: sorted.length,
+          separatorBuilder: (_, index) => SizedBox(height: tokens.s2),
+          itemBuilder: (context, i) {
+            final playlist = sorted[i];
+            return _PlaylistRow(playlist: playlist);
+          },
+        );
+      },
+    );
+  }
+}
+
+class _PlaylistRow extends ConsumerWidget {
+  const _PlaylistRow({required this.playlist});
+  final PlaylistRecord playlist;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<SpaceTokens>()!;
+    final scale = theme.extension<TypographyScale>()!;
+    return Glass(
+      intensity: GlassIntensity.medium,
+      radius: tokens.s3,
+      padding: EdgeInsets.zero,
+      child: ListTile(
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: tokens.s4,
+          vertical: tokens.s2,
+        ),
+        leading: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: theme.colorScheme.primary.withValues(alpha: 0.12),
           ),
+          child: Icon(
+            Icons.auto_awesome,
+            color: theme.colorScheme.primary,
+          ),
+        ),
+        title: Text(
+          playlist.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: scale.body16.copyWith(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          '${playlist.trackCount} tracks · ${_relativeDate(playlist.createdAt)}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: scale.caption13.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) async {
+            if (value == 'delete') {
+              final db = await ref.read(cacheDbProvider.future);
+              await db.playlists.deleteById(playlist.id);
+              ref.invalidate(playlistsProvider);
+            }
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(value: 'delete', child: Text('Delete')),
+          ],
+          icon: const Icon(Icons.more_vert),
+        ),
+        onTap: () => Navigator.of(context).push(
+          PlaylistDetailScreen.route(playlist.id),
         ),
       ),
     );
+  }
+
+  static String _relativeDate(DateTime dt) {
+    final now = DateTime.now();
+    final delta = now.difference(dt);
+    if (delta.inMinutes < 60) return '${delta.inMinutes}m ago';
+    if (delta.inHours < 24) return '${delta.inHours}h ago';
+    if (delta.inDays < 30) return '${delta.inDays}d ago';
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 }
 
