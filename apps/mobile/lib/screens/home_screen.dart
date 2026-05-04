@@ -5,13 +5,11 @@ import 'package:prism_ui/ui.dart';
 import '../providers/metadata_providers.dart';
 import '../providers/playback_providers.dart';
 import '../shell/app_shell.dart';
-import '../widgets/album_tile.dart';
 import '../widgets/artist_tile.dart';
 import '../widgets/discover_grids.dart';
 import '../widgets/embedded_art.dart';
 import '../widgets/mood_chip_row.dart';
 import 'ai_tab.dart';
-import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
 
 /// Home — greeting + AI compose card + featured / artists / recent
@@ -44,7 +42,7 @@ class HomeScreen extends ConsumerWidget {
             tokens.s2,
             tokens.s4,
             // Leave room for the floating MiniPlayer + BottomNav.
-            tokens.s8 * 2,
+            tokens.s8,
           ),
           children: [
             // Greeting block — small caption + display title with
@@ -61,9 +59,6 @@ class HomeScreen extends ConsumerWidget {
             Text('Mood', style: scale.display20),
             SizedBox(height: tokens.s2),
             const MoodChipRow(),
-            SizedBox(height: tokens.s4),
-            // Featured row (horizontally scrolling album cards).
-            const _FeaturedRow(),
             SizedBox(height: tokens.s4),
             // Discover albums grid (2×3 with independent refresh).
             const DiscoverAlbumsGrid(),
@@ -279,52 +274,6 @@ class _ComposeCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _FeaturedRow extends ConsumerWidget {
-  const _FeaturedRow();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final tokens = theme.extension<SpaceTokens>()!;
-    final scale = theme.extension<TypographyScale>()!;
-    final albumsAsync = ref.watch(albumsProvider);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SectionHead(title: 'Featured', style: scale.display20),
-        SizedBox(height: tokens.s2),
-        SizedBox(
-          height: 200,
-          child: albumsAsync.when(
-            loading: () => const _RowLoading(),
-            error: (e, _) => _RowError(message: '$e'),
-            data: (albums) {
-              if (albums.isEmpty) {
-                return const _RowEmpty(message: 'No albums yet.');
-              }
-              final featured = albums.take(8).toList();
-              return ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: featured.length,
-                separatorBuilder: (_, _) => SizedBox(width: tokens.s3),
-                itemBuilder: (_, i) => SizedBox(
-                  width: 160,
-                  child: AlbumTile(
-                    album: featured[i],
-                    onTap: () => Navigator.of(context).push(
-                      AlbumDetailScreen.route(featured[i].id),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
     );
   }
 }
