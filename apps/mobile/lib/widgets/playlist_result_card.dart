@@ -7,8 +7,10 @@ import 'package:prism_playlist_engine/playlist_engine.dart';
 import 'package:prism_ui/ui.dart';
 
 import '../providers/ai_compose_playback_providers.dart';
+import '../providers/cache_db_providers.dart';
 import '../providers/playback_providers.dart';
 import '../providers/playlist_engine_providers.dart';
+import '../providers/playlists_provider.dart';
 import '../providers/radio_providers.dart' show trackByIdLookupProvider;
 
 /// Result surface — rendered inside the New Vibe sheet once
@@ -140,6 +142,20 @@ class PlaylistResultCard extends ConsumerWidget {
             label: result.blurb,
           ),
         );
+    // Slice-10b §C2 — persist the playlist so it shows in Library tab.
+    // Done after play() so playback isn't gated on the DB write.
+    // ignore: discarded_futures
+    ref.read(cacheDbProvider.future).then((db) async {
+      await db.playlists.insertGenerated(
+        title: result.blurb.isNotEmpty
+            ? result.blurb.split('\n').first.trim() // first line as title
+            : vibe, // fallback to prompt
+        blurb: result.blurb,
+        prompt: vibe,
+        trackPaths: tracks.map((t) => t.path).toList(),
+      );
+      ref.invalidate(playlistsProvider);
+    });
   }
 }
 

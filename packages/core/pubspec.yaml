@@ -19,6 +19,7 @@ dependencies:
   # (Linux desktop, dart-test) both implement. Picking `sqflite_common`
   # at the core layer keeps `packages/core` Flutter-free; the apps wire
   # the platform-specific factory.
+  meta: ^1.17.0
   sqflite_common: ^2.5.4
   sqlite3: ^2.4.6
   json_annotation: ^4.11.0

@@ -12,7 +12,7 @@ import 'vec_loader.dart';
 class Migrations {
   /// Schema version Prism's slice-4 build emits. Bump this in lockstep
   /// with a new migration step — never edit the old steps in place.
-  static const int currentVersion = 1;
+  static const int currentVersion = 2;
 
   /// Database `version` matches [currentVersion]. Hooked into
   /// `sqflite.openDatabase(version: Migrations.currentVersion, ...)`.
@@ -26,11 +26,8 @@ class Migrations {
     required int oldVersion,
     required int newVersion,
   }) async {
-    if (oldVersion < 1 && newVersion >= 1) {
-      await _v1(txn);
-    }
-    // Future steps:
-    // if (oldVersion < 2 && newVersion >= 2) await _v2(txn);
+    if (oldVersion < 1 && newVersion >= 1) await _v1(txn);
+    if (oldVersion < 2 && newVersion >= 2) await _v2(txn);
   }
 
   /// Initial creation path for a brand-new database. Same DDL as
@@ -38,6 +35,32 @@ class Migrations {
   /// `sqflite.onCreate` doesn't have to fake an `oldVersion` value.
   static Future<void> create(DatabaseExecutor txn) async {
     await _v1(txn);
+    await _v2(txn);
+  }
+
+  static Future<void> _v2(DatabaseExecutor txn) async {
+    await txn.execute('''
+      CREATE TABLE playlists (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        blurb TEXT,
+        prompt TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+    await txn.execute('''
+      CREATE TABLE playlist_tracks (
+        playlist_id INTEGER NOT NULL,
+        position INTEGER NOT NULL,
+        track_path TEXT NOT NULL,
+        PRIMARY KEY (playlist_id, position),
+        FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE
+      )
+    ''');
+    await txn.execute(
+      'CREATE INDEX playlist_tracks_path ON playlist_tracks(track_path)',
+    );
   }
 
   static Future<void> _v1(DatabaseExecutor txn) async {

@@ -25,6 +25,7 @@ export 'src/db/knn.dart';
 export 'src/db/migrations.dart';
 export 'src/db/mood_query.dart';
 export 'src/db/playlist_repo_impl.dart';
+export 'src/db/playlists_dao.dart';
 // Slice 6 — `TrackRepoImpl extends PlaylistRepoImpl` adds the
 // LLM-driven candidate-pool SQL + keyword mean embedding helper.
 export 'src/db/track_repo_impl.dart';
