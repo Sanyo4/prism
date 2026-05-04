@@ -145,6 +145,46 @@ final backfillQueueProvider = Provider<BackfillQueue?>((ref) {
   );
 });
 
+/// Slice-10b §D4 — debounced wrapper around the raw backfill patch stream.
+/// Buffers patches over a sliding 200 ms window; emits the merged map exactly
+/// once per quiet window. Saves consumers from rebuilding hundreds of times
+/// during metadata enrichment (one patch event per online-metadata row, easily
+/// 1k+ during a full backfill).
+final _debouncedPatchesProvider =
+    StreamProvider<Map<String, TrackMetadataPatch>>((ref) {
+  final queue = ref.watch(backfillQueueProvider);
+  if (queue == null) {
+    return Stream.value(const <String, TrackMetadataPatch>{});
+  }
+
+  final controller = StreamController<Map<String, TrackMetadataPatch>>();
+  final buffer = <String, TrackMetadataPatch>{};
+  Timer? flushTimer;
+
+  void flush() {
+    if (buffer.isEmpty) return;
+    if (controller.isClosed) return;
+    controller.add(Map.unmodifiable(buffer));
+  }
+
+  final patchSub = queue.stream.listen((patch) {
+    buffer[patch.path] = patch.patch; // Latest patch per path wins.
+    flushTimer?.cancel();
+    flushTimer = Timer(
+      const Duration(milliseconds: 200),
+      flush,
+    );
+  });
+
+  ref.onDispose(() {
+    patchSub.cancel();
+    flushTimer?.cancel();
+    controller.close();
+  });
+
+  return controller.stream;
+});
+
 /// Streams BackfillQueue patches into a `Map<String, TrackMetadataPatch>`
 /// keyed by path. Slice 2's merge model is "last patch wins" — the
 /// repository never emits a contradicting patch for the same path
@@ -173,17 +213,23 @@ class TrackPatchNotifier
   }
 }
 
-/// `tracksProvider` + `trackPatchProvider` merged into one map keyed
-/// by path. Browse providers consume this. The patch merge applies
-/// MB-sourced fields *only when the original tag was missing* —
+/// `tracksProvider` + debounced patches merged into one map keyed by path.
+/// Browse providers consume this. The patch merge applies MB-sourced fields
+/// *only when the original tag was missing* —
 /// `MetadataRepository._mergePatchFromRecording` already enforced that
 /// rule, so `_mergeTrack` below trusts the patch and overwrites null
 /// fields verbatim.
+///
+/// Slice-10b §D4 — consumes the debounced patch stream (_debouncedPatchesProvider)
+/// to avoid thrashing the downstream providers (albumsProvider, artistsProvider,
+/// genreOptionsProvider, etc.) with hundreds of rebuilds per second during
+/// metadata enrichment. The debounce buffers patches over a 200 ms sliding window.
 final trackWithPatchProvider =
     Provider<AsyncValue<MergedTracks>>((ref) {
   final tracksAsync = ref.watch(tracksProvider);
-  final patches = ref.watch(trackPatchProvider);
+  final patchesAsync = ref.watch(_debouncedPatchesProvider);
   return tracksAsync.whenData((tracks) {
+    final patches = patchesAsync.asData?.value ?? const <String, TrackMetadataPatch>{};
     final merged = <String, Track>{};
     final releaseMbidByPath = <String, String?>{};
     final artistMbidByPath = <String, String?>{};
