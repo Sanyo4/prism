@@ -6,6 +6,7 @@ import 'package:prism_core/core.dart' hide KnnHit;
 import 'package:prism_playlist_engine/playlist_engine.dart';
 import 'package:prism_ui/ui.dart';
 
+import '../providers/ai_compose_playback_providers.dart';
 import '../providers/playback_providers.dart';
 import '../providers/playlist_engine_providers.dart';
 import '../providers/radio_providers.dart' show trackByIdLookupProvider;
@@ -127,6 +128,18 @@ class PlaylistResultCard extends ConsumerWidget {
     // ignore: discarded_futures — fire-and-forget; errors surface
     // via the player state stream to NowPlayingScreen.
     ref.read(playbackServiceProvider).play();
+    // Slice-10 — register the AI Compose playback so the end-of-queue
+    // observer can surface the "Keep playing" sheet when this playlist
+    // drains. We record the live Track list (already mapped via
+    // trackByIdLookupProvider above) plus the originating vibe prompt
+    // and the LLM blurb for the sheet's display label.
+    ref.read(aiComposePlaybackProvider.notifier).set(
+          AiComposePlayback(
+            tracks: tracks,
+            prompt: vibe,
+            label: result.blurb,
+          ),
+        );
   }
 }
 
