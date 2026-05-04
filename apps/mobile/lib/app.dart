@@ -63,6 +63,13 @@ class _PrismAppState extends ConsumerState<PrismApp> {
       if (!partOfAiPlaylist) return;
       // Schedule the sheet on the next frame so we don't trigger
       // navigator changes inside a build.
+      //
+      // Clear the registered playback BEFORE showing the sheet so a
+      // swipe-dismiss (which doesn't run either button handler) still
+      // leaves no stale state — preventing a re-trigger on the next
+      // drain. The button handlers still call clear() idempotently as
+      // defense-in-depth; redundant calls are harmless.
+      ref.read(aiComposePlaybackProvider.notifier).clear();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final ctx = _navKey.currentContext;
         if (ctx == null) return;
