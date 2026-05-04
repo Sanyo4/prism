@@ -5,6 +5,7 @@ import 'knn.dart';
 import 'migrations.dart';
 import 'mood_query.dart';
 import 'playlists_dao.dart';
+import 'tracks_cache_dao.dart';
 import 'vec_loader.dart';
 import 'vibe_query.dart';
 import 'vibe_shuffle_query.dart';
@@ -118,6 +119,9 @@ class CacheDb {
 
   /// Slice-10b §C2 — persisted AI Compose playlists.
   PlaylistsDao get playlists => PlaylistsDao(this);
+
+  /// Slice-10b §D2 — persisted track scan cache.
+  TracksCacheDao get tracksCache => TracksCacheDao(this);
 
   /// kNN over [track_embeddings]. Returns a list ordered by ascending
   /// L2 distance with the seed excluded. See [knnByEmbedding] in

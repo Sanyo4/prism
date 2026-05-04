@@ -12,7 +12,7 @@ import 'vec_loader.dart';
 class Migrations {
   /// Schema version Prism's slice-4 build emits. Bump this in lockstep
   /// with a new migration step — never edit the old steps in place.
-  static const int currentVersion = 2;
+  static const int currentVersion = 3;
 
   /// Database `version` matches [currentVersion]. Hooked into
   /// `sqflite.openDatabase(version: Migrations.currentVersion, ...)`.
@@ -28,6 +28,7 @@ class Migrations {
   }) async {
     if (oldVersion < 1 && newVersion >= 1) await _v1(txn);
     if (oldVersion < 2 && newVersion >= 2) await _v2(txn);
+    if (oldVersion < 3 && newVersion >= 3) await _v3(txn);
   }
 
   /// Initial creation path for a brand-new database. Same DDL as
@@ -36,6 +37,34 @@ class Migrations {
   static Future<void> create(DatabaseExecutor txn) async {
     await _v1(txn);
     await _v2(txn);
+    await _v3(txn);
+  }
+
+  static Future<void> _v3(DatabaseExecutor txn) async {
+    await txn.execute('''
+      CREATE TABLE tracks_cache (
+        path                TEXT PRIMARY KEY,
+        mtime_ms            INTEGER NOT NULL,
+        title               TEXT,
+        artist              TEXT,
+        album_artist        TEXT,
+        album               TEXT,
+        genre               TEXT,
+        track_no            INTEGER,
+        disc_no             INTEGER,
+        year                INTEGER,
+        duration_ms         INTEGER,
+        replaygain_track_db REAL,
+        replaygain_album_db REAL,
+        scanned_at          INTEGER NOT NULL
+      )
+    ''');
+    await txn.execute(
+      'CREATE INDEX tracks_cache_album ON tracks_cache(album)',
+    );
+    await txn.execute(
+      'CREATE INDEX tracks_cache_artist ON tracks_cache(artist)',
+    );
   }
 
   static Future<void> _v2(DatabaseExecutor txn) async {
