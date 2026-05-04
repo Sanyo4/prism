@@ -8,6 +8,17 @@ import 'audio_player_port.dart';
 import 'cast/local_player_handle.dart';
 import 'queue_service.dart';
 
+// ---------------------------------------------------------------------------
+// Fade-in constants (slice-10b §A6)
+// ---------------------------------------------------------------------------
+//
+// 40 ms linear ramp: 8 steps × 5 ms.  Below the ~50 ms human attack-time
+// threshold, so the listener doesn't perceive a fade — it just suppresses
+// the click/pop that comes from ExoPlayer starting decode at the *previous*
+// track's gain level for 10–30 ms before the new `setVolume` lands.
+const int _fadeInSteps = 8;
+const Duration _fadeInStepDuration = Duration(milliseconds: 5);
+
 /// Thin shim around an [AudioPlayerPort] that keeps the
 /// player in lock-step with [QueueService]'s three-zone snapshot.
 ///
@@ -150,6 +161,18 @@ class PlaybackService {
       StreamController<Track?>.broadcast();
   bool _disposed = false;
 
+  // ---------------------------------------------------------------------------
+  // Slice-10b §A6: fade-in state
+  // ---------------------------------------------------------------------------
+  /// Active fade-in timer; cancelled on the next track-switch so a rapid
+  /// sequence of switches doesn't stack ramps.
+  Timer? _fadeInTimer;
+
+  /// Target gain for the in-flight fade-in (linear, 0..1). When the ramp
+  /// completes this matches the persistent ReplayGain volume; during the ramp
+  /// it's the destination value.
+  double _fadeInTarget = 1.0;
+
   /// Last snapshot the service has sync'd with the backend. Exposed
   /// for tests and for the Notifier bridge in step 10 that needs to
   /// publish `MediaItem`s without a second listener.
@@ -193,6 +216,11 @@ class PlaybackService {
   ///    playhead only when the active track's identity is unchanged —
   ///    anything else would splice audio mid-track which reads as a
   ///    glitch.
+  ///
+  /// Slice-10b §A6: when the active Track changes between [prev] and [next],
+  /// the service pre-sets the player volume to 0.0 BEFORE the source-switch
+  /// so ExoPlayer starts decoding the new source silently, then schedules a
+  /// 40 ms linear fade-in to the target ReplayGain volume (8 × 5 ms steps).
   Future<void> syncSnapshot(QueueSnapshot next) async {
     final prev = _snapshot;
     _snapshot = next;
@@ -205,16 +233,33 @@ class PlaybackService {
       return;
     }
 
+    final trackChanged = prev.current != next.current;
+
     if (_flatListsMatch(prev.flat, next.flat)) {
       if (prev.currentIndex != next.currentIndex) {
+        // Same flat list but a different active index → jumping to another
+        // pre-loaded source. ExoPlayer switches the active MediaSource, so
+        // the same pre-decode volume glitch applies. Apply fade-in.
+        if (trackChanged) {
+          _fadeInTimer?.cancel();
+          _fadeInTarget = _resolveTargetVolume(next.current);
+          await _player.setVolume(0.0);
+        }
         _syncing = true;
         try {
           await _player.seek(Duration.zero, index: next.currentIndex);
         } finally {
           _syncing = false;
         }
+        if (trackChanged) {
+          _scheduleFadeIn();
+        } else {
+          await _applyReplayGain(next.current);
+        }
+      } else {
+        // Pure emission — same flat, same index. Volume sync only.
+        await _applyReplayGain(next.current);
       }
-      await _applyReplayGain(next.current);
       _emitCurrentTrack();
       return;
     }
@@ -243,15 +288,23 @@ class PlaybackService {
         } finally {
           _syncing = false;
         }
+        // Active track unchanged — no fade needed, just sync volume.
         await _applyReplayGain(next.current);
         _emitCurrentTrack();
         return;
       }
     }
 
-    // Rebuild path.
+    // Rebuild path.  When the active track changes, pre-set volume to 0.0
+    // before the setAudioSources call, then schedule the fade-in after.
     final wasPlaying = _player.playing;
     final resumeFrom = activePreserved ? _player.position : Duration.zero;
+
+    if (trackChanged) {
+      _fadeInTimer?.cancel();
+      _fadeInTarget = _resolveTargetVolume(next.current);
+      await _player.setVolume(0.0);
+    }
 
     final sources = <AudioSource>[
       for (final t in next.flat) AudioSource.uri(Uri.file(t.path)),
@@ -270,8 +323,42 @@ class PlaybackService {
     } finally {
       _syncing = false;
     }
-    await _applyReplayGain(next.current);
+
+    if (trackChanged) {
+      _scheduleFadeIn();
+    } else {
+      await _applyReplayGain(next.current);
+    }
     _emitCurrentTrack();
+  }
+
+  /// Resolves the target linear volume for [track] using the same precedence
+  /// logic as [_applyReplayGain]: measured (sidecar cache) wins over tag RG.
+  double _resolveTargetVolume(Track? track) {
+    final measured =
+        track == null ? null : measuredReplayGainLookup?.call(track);
+    return resolveVolume(
+      enabled: _replayGainEnabled,
+      replayGainTrackDb: measured ?? track?.replayGainTrackDb,
+    );
+  }
+
+  /// Schedules an 8-step × 5 ms linear fade-in from 0.0 to [_fadeInTarget].
+  /// Any in-flight fade is already cancelled by the caller before this runs.
+  void _scheduleFadeIn() {
+    var step = 0;
+    _fadeInTimer = Timer.periodic(_fadeInStepDuration, (t) {
+      step++;
+      if (step >= _fadeInSteps) {
+        t.cancel();
+        _fadeInTimer = null;
+        // ignore: discarded_futures
+        _player.setVolume(_fadeInTarget);
+        return;
+      }
+      // ignore: discarded_futures
+      _player.setVolume(_fadeInTarget * step / _fadeInSteps);
+    });
   }
 
   /// Currently active transport. The default after construction is a
@@ -404,6 +491,10 @@ class PlaybackService {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    // Cancel any in-flight fade-in so the periodic Timer doesn't fire
+    // after the player is torn down.
+    _fadeInTimer?.cancel();
+    _fadeInTimer = null;
     await _indexSub?.cancel();
     _indexSub = null;
     await _transportEventsSub?.cancel();

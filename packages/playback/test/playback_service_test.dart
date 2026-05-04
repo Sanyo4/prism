@@ -198,13 +198,18 @@ void main() {
   });
 
   group('PlaybackService.syncSnapshot: ReplayGain → player.volume', () {
-    test('tag-embedded TRACK_GAIN lands on the fake player as dbToLinear',
-        () async {
+    // These tests use testWidgets + pump so the 40 ms fade-in timer
+    // (slice-10b §A6) completes before the volume assertions run.
+    testWidgets(
+        'tag-embedded TRACK_GAIN lands on the fake player as dbToLinear',
+        (tester) async {
       final fake = _FakePlayer();
       final service = PlaybackService(player: fake);
       addTearDown(service.dispose);
 
       await service.syncSnapshot(_snapshotOf([_track('a', rgDb: -3.0)]));
+      // Advance time past the 40 ms fade-in (8 × 5 ms steps).
+      await tester.pump(const Duration(milliseconds: 50));
 
       // Slice 1 §11 checklist: "applied volume visible via the player's
       // volume getter under test".
@@ -212,22 +217,27 @@ void main() {
       expect(fake.volumeCalls, isNotEmpty);
     });
 
-    test('absent tag falls through to 0 dB (volume 1.0)', () async {
+    testWidgets('absent tag falls through to 0 dB (volume 1.0)',
+        (tester) async {
       final fake = _FakePlayer();
       final service = PlaybackService(player: fake);
       addTearDown(service.dispose);
 
       await service.syncSnapshot(_snapshotOf([_track('a')]));
+      await tester.pump(const Duration(milliseconds: 50));
 
       expect(fake.volume, equals(1.0));
     });
 
-    test('disabling ReplayGain restores full-scale volume even mid-track',
-        () async {
+    testWidgets(
+        'disabling ReplayGain restores full-scale volume even mid-track',
+        (tester) async {
       final fake = _FakePlayer();
       final service = PlaybackService(player: fake);
       addTearDown(service.dispose);
       await service.syncSnapshot(_snapshotOf([_track('a', rgDb: -9.0)]));
+      // Let the fade-in settle so volume reflects the RG-attenuated level.
+      await tester.pump(const Duration(milliseconds: 50));
       expect(fake.volume, lessThan(1.0));
 
       await service.setReplayGainEnabled(false);
@@ -449,7 +459,9 @@ void main() {
   group('Slice-4: measured RG (cache) precedence over tag RG', () {
     // Slice-4 §11 item 9 / §12 DoD:
     //   tag = -8 dB, sidecar = -6 dB → plays at dbToLinear(-6) ± 1e-3.
-    test('measured wins over tag when lookup returns a value', () async {
+    // testWidgets + pump lets the 40 ms fade-in (slice-10b §A6) settle.
+    testWidgets('measured wins over tag when lookup returns a value',
+        (tester) async {
       final fake = _FakePlayer();
       final service = PlaybackService(
         player: fake,
@@ -458,12 +470,13 @@ void main() {
       addTearDown(service.dispose);
 
       await service.syncSnapshot(_snapshotOf([_track('a', rgDb: -8.0)]));
+      await tester.pump(const Duration(milliseconds: 50));
 
       expect(fake.volume, closeTo(dbToLinear(-6.0), 1e-3));
     });
 
-    test('tag wins when lookup returns null (no cache row / non-ready)',
-        () async {
+    testWidgets('tag wins when lookup returns null (no cache row / non-ready)',
+        (tester) async {
       final fake = _FakePlayer();
       final service = PlaybackService(
         player: fake,
@@ -472,12 +485,14 @@ void main() {
       addTearDown(service.dispose);
 
       await service.syncSnapshot(_snapshotOf([_track('a', rgDb: -8.0)]));
+      await tester.pump(const Duration(milliseconds: 50));
 
       expect(fake.volume, closeTo(dbToLinear(-8.0), 1e-12));
     });
 
-    test('lookup returning null falls all the way back to 1.0 when no tag',
-        () async {
+    testWidgets(
+        'lookup returning null falls all the way back to 1.0 when no tag',
+        (tester) async {
       final fake = _FakePlayer();
       final service = PlaybackService(
         player: fake,
@@ -486,9 +501,166 @@ void main() {
       addTearDown(service.dispose);
 
       await service.syncSnapshot(_snapshotOf([_track('a')]));
+      await tester.pump(const Duration(milliseconds: 50));
 
       expect(fake.volume, equals(1.0));
     });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Slice-10b §A6: pre-set volume + 40 ms fade-in on track-switch
+  // ---------------------------------------------------------------------------
+  group('Slice-10b §A6: fade-in on track-switch', () {
+    testWidgets(
+      'track-switch (rebuild path): volume is 0.0 before source-switch, '
+      'ramps monotonically, settles at target ReplayGain level within 50 ms',
+      (tester) async {
+        final fake = _FakePlayer();
+        final service = PlaybackService(player: fake);
+        addTearDown(service.dispose);
+
+        // Drive the first track-switch: null → trackA.
+        const rgDb = -6.0;
+        final target = PlaybackService.resolveVolume(
+          enabled: true,
+          replayGainTrackDb: rgDb,
+        );
+
+        fake.volumeCalls.clear();
+        await service.syncSnapshot(_snapshotOf([_track('a', rgDb: rgDb)]));
+
+        // Invariant 1: the very first volume call after syncSnapshot must
+        // be the pre-set silent value.
+        expect(
+          fake.volumeCalls,
+          isNotEmpty,
+          reason: 'setVolume must be called during syncSnapshot.',
+        );
+        expect(
+          fake.volumeCalls.first,
+          equals(0.0),
+          reason: 'Volume must be pre-set to 0.0 before source-switch.',
+        );
+
+        // Advance time through the full 40 ms fade-in.
+        await tester.pump(const Duration(milliseconds: 50));
+
+        // Invariant 2: calls after the pre-set should be monotonically
+        // increasing (the ramp from 0 → target).
+        final postPreset = fake.volumeCalls.skip(1).toList();
+        expect(postPreset, isNotEmpty,
+            reason: 'Fade-in steps must land within 50 ms.');
+        for (var i = 1; i < postPreset.length; i++) {
+          expect(
+            postPreset[i],
+            greaterThanOrEqualTo(postPreset[i - 1]),
+            reason: 'Volume ramp must be monotonically non-decreasing; '
+                'got ${postPreset[i - 1]} → ${postPreset[i]} at step $i.',
+          );
+        }
+
+        // Invariant 3: final settled volume equals the ReplayGain target.
+        expect(
+          fake.volume,
+          closeTo(target, 1e-9),
+          reason: 'Final volume must equal the ReplayGain target.',
+        );
+      },
+    );
+
+    testWidgets(
+      'rapid track-switch cancels in-flight fade — no stacked ramps',
+      (tester) async {
+        final fake = _FakePlayer();
+        final service = PlaybackService(player: fake);
+        addTearDown(service.dispose);
+
+        // First track-switch starts a fade.
+        await service.syncSnapshot(_snapshotOf([_track('a', rgDb: -6.0)]));
+
+        // Second track-switch before the fade completes.
+        // The previous fade must be cancelled; only the new target matters.
+        const secondRgDb = -3.0;
+        final secondTarget = PlaybackService.resolveVolume(
+          enabled: true,
+          replayGainTrackDb: secondRgDb,
+        );
+        fake.volumeCalls.clear();
+        await service.syncSnapshot(
+          _snapshotOf([_track('b', rgDb: secondRgDb)]),
+        );
+
+        // Pre-set 0.0 for the second switch.
+        expect(fake.volumeCalls.first, equals(0.0));
+
+        // Let the second fade settle.
+        await tester.pump(const Duration(milliseconds: 50));
+
+        // Final volume is the second track's target, not the first's.
+        expect(
+          fake.volume,
+          closeTo(secondTarget, 1e-9),
+          reason: 'Final volume must reflect the second (current) track.',
+        );
+      },
+    );
+
+    testWidgets(
+      'same-track same-index re-emission does not trigger a fade',
+      (tester) async {
+        final fake = _FakePlayer();
+        final service = PlaybackService(player: fake);
+        addTearDown(service.dispose);
+
+        // Seed with a track and let the initial fade settle.
+        await service.syncSnapshot(_snapshotOf([_track('a', rgDb: -6.0)]));
+        await tester.pump(const Duration(milliseconds: 50));
+
+        final volumeBeforeResync = fake.volume;
+        fake.volumeCalls.clear();
+
+        // Emit the identical snapshot again — flat unchanged, index unchanged.
+        await service.syncSnapshot(_snapshotOf([_track('a', rgDb: -6.0)]));
+
+        // No pre-set 0.0 should appear; _applyReplayGain short-circuits on
+        // unchanged volume so volumeCalls may be empty.
+        expect(
+          fake.volumeCalls.contains(0.0),
+          isFalse,
+          reason: 'A no-op re-emission must not trigger a silent pre-set.',
+        );
+
+        // Volume must remain at the previous settled level.
+        expect(fake.volume, closeTo(volumeBeforeResync, 1e-9));
+      },
+    );
+
+    testWidgets(
+      'measured ReplayGain (slice-4 hook) is the fade-in target — not tag RG',
+      (tester) async {
+        final fake = _FakePlayer();
+        const measuredDb = -4.0;
+        const tagDb = -10.0;
+        final service = PlaybackService(
+          player: fake,
+          measuredReplayGainLookup: (track) => measuredDb,
+        );
+        addTearDown(service.dispose);
+
+        await service.syncSnapshot(_snapshotOf([_track('a', rgDb: tagDb)]));
+        await tester.pump(const Duration(milliseconds: 50));
+
+        final expectedTarget = PlaybackService.resolveVolume(
+          enabled: true,
+          replayGainTrackDb: measuredDb,
+        );
+        expect(
+          fake.volume,
+          closeTo(expectedTarget, 1e-9),
+          reason: 'Fade target must use measured RG, not tag RG.',
+        );
+      },
+    );
   });
 
   // Slice-9 §6 step 6 + §11 — `setTransport` swaps the active
