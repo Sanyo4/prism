@@ -92,47 +92,71 @@ class LibraryFilterSheet extends ConsumerWidget {
       case LibrarySheetTab.albums:
         return [
           Text('Sort', style: scale.caption13),
-          for (final v in AlbumSort.values)
-            RadioListTile<AlbumSort>(
-              value: v,
-              groupValue: prefs.albumSort,
-              title: Text(_albumSortLabel(v)),
-              onChanged: (value) {
-                if (value == null) return;
-                // ignore: discarded_futures
-                ref.read(libraryViewPrefsProvider.notifier).setAlbumSort(value);
-              },
+          RadioGroup<AlbumSort>(
+            groupValue: prefs.albumSort,
+            onChanged: (value) {
+              if (value == null) return;
+              // ignore: discarded_futures
+              ref.read(libraryViewPrefsProvider.notifier).setAlbumSort(value);
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final v in AlbumSort.values)
+                  RadioListTile<AlbumSort>(
+                    value: v,
+                    title: Text(_albumSortLabel(v)),
+                  ),
+              ],
             ),
+          ),
         ];
       case LibrarySheetTab.artists:
         return [
           Text('Sort', style: scale.caption13),
-          for (final v in ArtistSort.values)
-            RadioListTile<ArtistSort>(
-              value: v,
-              groupValue: prefs.artistSort,
-              title: Text(_artistSortLabel(v)),
-              onChanged: (value) {
-                if (value == null) return;
-                // ignore: discarded_futures
-                ref.read(libraryViewPrefsProvider.notifier).setArtistSort(value);
-              },
+          RadioGroup<ArtistSort>(
+            groupValue: prefs.artistSort,
+            onChanged: (value) {
+              if (value == null) return;
+              // ignore: discarded_futures
+              ref.read(libraryViewPrefsProvider.notifier).setArtistSort(value);
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final v in ArtistSort.values)
+                  RadioListTile<ArtistSort>(
+                    value: v,
+                    title: Text(_artistSortLabel(v)),
+                  ),
+              ],
             ),
+          ),
         ];
       case LibrarySheetTab.playlists:
         return [
           Text('Sort', style: scale.caption13),
-          for (final v in PlaylistSort.values)
-            RadioListTile<PlaylistSort>(
-              value: v,
-              groupValue: prefs.playlistSort,
-              title: Text(_playlistSortLabel(v)),
-              onChanged: (value) {
-                if (value == null) return;
-                // ignore: discarded_futures
-                ref.read(libraryViewPrefsProvider.notifier).setPlaylistSort(value);
-              },
+          RadioGroup<PlaylistSort>(
+            groupValue: prefs.playlistSort,
+            onChanged: (value) {
+              if (value == null) return;
+              // ignore: discarded_futures
+              ref.read(libraryViewPrefsProvider.notifier).setPlaylistSort(value);
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final v in PlaylistSort.values)
+                  RadioListTile<PlaylistSort>(
+                    value: v,
+                    title: Text(_playlistSortLabel(v)),
+                  ),
+              ],
             ),
+          ),
         ];
       case LibrarySheetTab.songs:
         return [
