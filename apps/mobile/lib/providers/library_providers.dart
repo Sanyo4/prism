@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:prism_core/core.dart';
 
+import '../browse/album_view.dart';
 import 'cache_db_providers.dart';
+import 'metadata_providers.dart' show albumsProvider;
 
 /// Accumulator for [ScanFailed] events produced by the most recent run
 /// of [tracksProvider]. Slice 1 only surfaces its length implicitly
@@ -204,3 +206,42 @@ final tracksProvider = FutureProvider<List<Track>>((ref) async {
   // build triggered by the invalidate, this is now the updated list.
   return cached;
 });
+
+/// Slice-11 §C2 — top 6 albums sorted by latest [Track.mtimeMs] desc.
+///
+/// `Track` doesn't carry a clean `dateAdded` timestamp, so we reuse
+/// the same `mtimeMs` proxy that `sortAlbums(..., AlbumSort.recentlyAdded)`
+/// already uses for the Library tab. The Home `_RecentlyAddedGrid`
+/// consumes this; tile shape mirrors `_RecentlyPlayedGrid` for visual
+/// rhyme.
+///
+// TODO(slice-12): expose a real `dateAdded` on Track (filesystem ctime
+// or first-seen timestamp persisted by the cache writer) so this
+// provider isn't quietly conflating "modified" with "added".
+final recentlyAddedAlbumsProvider = Provider<AsyncValue<List<AlbumView>>>(
+  (ref) {
+    final albumsAsync = ref.watch(albumsProvider);
+    return albumsAsync.whenData((albums) {
+      final sorted = List<AlbumView>.of(albums)
+        ..sort((a, b) {
+          final ra = _maxAddedAtMs(a);
+          final rb = _maxAddedAtMs(b);
+          if (ra == null && rb == null) {
+            return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+          }
+          if (ra == null) return 1;
+          if (rb == null) return -1;
+          return rb.compareTo(ra);
+        });
+      return sorted.take(6).toList();
+    });
+  },
+);
+
+int? _maxAddedAtMs(AlbumView a) {
+  int? best;
+  for (final t in a.tracks) {
+    if (best == null || t.mtimeMs > best) best = t.mtimeMs;
+  }
+  return best;
+}

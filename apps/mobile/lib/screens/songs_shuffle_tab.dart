@@ -7,16 +7,21 @@ import 'package:prism_ui/ui.dart';
 import '../providers/playback_providers.dart';
 import '../providers/radio_providers.dart';
 import '../providers/songs_shuffle_providers.dart';
+import '../shell/app_shell.dart';
 import '../widgets/mood_chip_row.dart';
 import 'radio_context_sheet.dart';
 
-/// Slice 10 §2.2 + slice-11 §B2 — Library → Songs is the iPod-shuffle
-/// surface. The mood chip row is multi-select again: tapping a chip
-/// toggles it in/out of the deck filter. Selected chips constrain the
-/// `VibeShuffleQuery` eligible set under both True-Shuffle and Tempo
-/// modes (the slice-10b D bypass bug is fixed in
-/// `vibe_shuffle_query.dart` — True-Shuffle randomises *order*, not the
-/// *eligible set*).
+/// Slice 10 §2.2 + slice-11 §B2 / §C3 — Songs is the iPod-shuffle
+/// surface. Slice-11 §C3 promoted it from a tab inside Library to a
+/// primary bottom-nav destination; the screen now wraps itself in
+/// [AppShell] (matching Home / Search / Library) instead of being
+/// embedded inside `LibraryScreen`'s TabBarView.
+///
+/// The mood chip row is multi-select: tapping a chip toggles it in/out
+/// of the deck filter. Selected chips constrain the `VibeShuffleQuery`
+/// eligible set under both True-Shuffle and Tempo modes
+/// (`vibe_shuffle_query.dart` — True-Shuffle randomises *order*, not
+/// the *eligible set*).
 ///
 /// Top: big Shuffle Play CTA + True Shuffle + Infinite toggles.
 /// Middle: "Pick a vibe" header + multi-select chip row (dimmed when
@@ -96,157 +101,193 @@ class _SongsShuffleTabState extends ConsumerState<SongsShuffleTab> {
     final state = ref.watch(songsShuffleStateProvider);
     final deckAsync = ref.watch(shuffleDeckProvider);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Shuffle CTA + toggles row.
-        Padding(
-          padding: EdgeInsets.fromLTRB(tokens.s4, tokens.s3, tokens.s4, tokens.s2),
-          child: Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: () =>
-                      _shufflePlay(ref, deckAsync.asData?.value ?? const []),
-                  icon: const Icon(Icons.shuffle),
-                  label: const Text('Shuffle play'),
-                ),
-              ),
-              SizedBox(width: tokens.s3),
-              FilterChip(
-                key: const Key('songs.trueShuffleToggle'),
-                label: const Text('True Shuffle'),
-                selected: state.trueShuffle,
-                onSelected: (v) => ref
-                    .read(songsShuffleStateProvider.notifier)
-                    .setTrueShuffle(v),
-              ),
-              SizedBox(width: tokens.s2),
-              FilterChip(
-                key: const Key('songs.infiniteToggle'),
-                label: const Text('Infinite'),
-                avatar: const Icon(Icons.all_inclusive, size: 18),
-                selected: state.infinite,
-                onSelected: (v) => ref
-                    .read(songsShuffleStateProvider.notifier)
-                    .setInfinite(v),
-              ),
-            ],
-          ),
-        ),
-        // Slice-11 §B2 — "Pick a vibe" header + multi-select chip row.
-        // Tapping a chip toggles it in/out of `state.chips`; the deck
-        // below reflows live. `dim: state.trueShuffle` is a visual hint
-        // that True-Shuffle randomises ordering — the chip filter still
-        // applies (slice-10b D bypass bug fixed in
-        // VibeShuffleQuery.run).
-        Padding(
-          padding:
-              EdgeInsets.symmetric(horizontal: tokens.s4, vertical: tokens.s1),
-          child: Text(
-            'Pick a vibe',
-            style: scale.caption13.copyWith(
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-        MoodChipRow(
-          controller: MoodChipController.multi(
-            initial: state.chips,
-            onChanged: (chips) =>
-                ref.read(songsShuffleStateProvider.notifier).setChips(chips),
-          ),
-          dim: state.trueShuffle,
-        ),
-        // Tempo dropdown row.
-        Padding(
-          padding:
-              EdgeInsets.symmetric(horizontal: tokens.s4, vertical: tokens.s2),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: _TempoDropdown(
-              value: state.band,
-              onChanged: (b) =>
-                  ref.read(songsShuffleStateProvider.notifier).setBand(b),
-            ),
-          ),
-        ),
-        const Divider(height: 1),
-        // Deck count + list.
-        deckAsync.when(
-          loading: () => const Padding(
-            padding: EdgeInsets.all(16),
-            child: Center(child: CircularProgressIndicator()),
-          ),
-          error: (e, _) => Padding(
-            padding: EdgeInsets.all(tokens.s4),
-            child: Text(
-              'Shuffle query failed: $e',
-              style: TextStyle(color: theme.colorScheme.error),
-            ),
-          ),
-          data: (deck) {
-            if (deck.isEmpty) {
-              return Padding(
-                padding: EdgeInsets.all(tokens.s6),
-                child: Center(
-                  child: Text(
-                    'No tracks match — try a different tempo or '
-                    'turn on True Shuffle.',
-                    style: scale.body16,
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              );
-            }
-            return Padding(
+    // Slice-11 §C3 — promoted to a top-level screen. Wraps itself in
+    // [AppShell] (Aurora variant, MiniPlayer, glass nav bar, Settings
+    // gear) and renders an inline display title to match the Home /
+    // Search / Library AppBar pattern.
+    return AppShell(
+      title: 'Songs',
+      currentTab: AppTab.songs,
+      useAurora: AuroraVariant.library,
+      showAppBar: false,
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Inline display title — mirrors Library / Search.
+            Padding(
               padding: EdgeInsets.fromLTRB(
-                  tokens.s4, tokens.s2, tokens.s4, tokens.s1),
+                tokens.s4,
+                tokens.s4,
+                tokens.s4,
+                tokens.s2,
+              ),
               child: Text(
-                'Showing ${deck.length} tracks',
+                'Songs',
+                style: scale.display36.copyWith(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: -0.8,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            ),
+            // Shuffle CTA + toggles row.
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                  tokens.s4, tokens.s3, tokens.s4, tokens.s2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _shufflePlay(
+                          ref, deckAsync.asData?.value ?? const []),
+                      icon: const Icon(Icons.shuffle),
+                      label: const Text('Shuffle play'),
+                    ),
+                  ),
+                  SizedBox(width: tokens.s3),
+                  FilterChip(
+                    key: const Key('songs.trueShuffleToggle'),
+                    label: const Text('True Shuffle'),
+                    selected: state.trueShuffle,
+                    onSelected: (v) => ref
+                        .read(songsShuffleStateProvider.notifier)
+                        .setTrueShuffle(v),
+                  ),
+                  SizedBox(width: tokens.s2),
+                  FilterChip(
+                    key: const Key('songs.infiniteToggle'),
+                    label: const Text('Infinite'),
+                    avatar: const Icon(Icons.all_inclusive, size: 18),
+                    selected: state.infinite,
+                    onSelected: (v) => ref
+                        .read(songsShuffleStateProvider.notifier)
+                        .setInfinite(v),
+                  ),
+                ],
+              ),
+            ),
+            // Slice-11 §B2 — "Pick a vibe" header + multi-select chip
+            // row. Tapping a chip toggles it in/out of `state.chips`;
+            // the deck below reflows live. `dim: state.trueShuffle` is
+            // a visual hint that True-Shuffle randomises ordering —
+            // the chip filter still applies (slice-10b D bypass bug
+            // fixed in VibeShuffleQuery.run).
+            Padding(
+              padding: EdgeInsets.symmetric(
+                  horizontal: tokens.s4, vertical: tokens.s1),
+              child: Text(
+                'Pick a vibe',
                 style: scale.caption13.copyWith(
+                  fontWeight: FontWeight.w600,
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-            );
-          },
-        ),
-        Expanded(
-          child: deckAsync.maybeWhen(
-            orElse: () => const SizedBox.shrink(),
-            data: (deck) => ListView.builder(
-              itemCount: deck.length,
-              itemBuilder: (context, i) {
-                final t = deck[i];
-                return ListTile(
-                  title: Text(
-                    t.title ?? _basename(t.path),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+            ),
+            MoodChipRow(
+              controller: MoodChipController.multi(
+                initial: state.chips,
+                onChanged: (chips) => ref
+                    .read(songsShuffleStateProvider.notifier)
+                    .setChips(chips),
+              ),
+              dim: state.trueShuffle,
+            ),
+            // Tempo dropdown row.
+            Padding(
+              padding: EdgeInsets.symmetric(
+                  horizontal: tokens.s4, vertical: tokens.s2),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _TempoDropdown(
+                  value: state.band,
+                  onChanged: (b) => ref
+                      .read(songsShuffleStateProvider.notifier)
+                      .setBand(b),
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            // Deck count + list.
+            deckAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (e, _) => Padding(
+                padding: EdgeInsets.all(tokens.s4),
+                child: Text(
+                  'Shuffle query failed: $e',
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ),
+              data: (deck) {
+                if (deck.isEmpty) {
+                  return Padding(
+                    padding: EdgeInsets.all(tokens.s6),
+                    child: Center(
+                      child: Text(
+                        'No tracks match — try a different tempo or '
+                        'turn on True Shuffle.',
+                        style: scale.body16,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                }
+                return Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      tokens.s4, tokens.s2, tokens.s4, tokens.s1),
+                  child: Text(
+                    'Showing ${deck.length} tracks',
+                    style: scale.caption13.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                  subtitle: Text(
-                    [t.artist, t.album]
-                        .whereType<String>()
-                        .where((s) => s.isNotEmpty)
-                        .join(' — '),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: t.bpm != null
-                      ? Text('${t.bpm!.toStringAsFixed(0)} bpm')
-                      : null,
-                  onTap: () => _playFromIndex(ref, deck, i),
-                  // Slice-10b: long-press a deck row to start radio
-                  // from that track. ShuffleTrack already carries the
-                  // engine `trackId`; no pathToId hop needed.
-                  onLongPress: () => _openRadioSheetForDeckRow(context, t),
                 );
               },
             ),
-          ),
+            Expanded(
+              child: deckAsync.maybeWhen(
+                orElse: () => const SizedBox.shrink(),
+                data: (deck) => ListView.builder(
+                  itemCount: deck.length,
+                  itemBuilder: (context, i) {
+                    final t = deck[i];
+                    return ListTile(
+                      title: Text(
+                        t.title ?? _basename(t.path),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        [t.artist, t.album]
+                            .whereType<String>()
+                            .where((s) => s.isNotEmpty)
+                            .join(' — '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: t.bpm != null
+                          ? Text('${t.bpm!.toStringAsFixed(0)} bpm')
+                          : null,
+                      onTap: () => _playFromIndex(ref, deck, i),
+                      // Slice-10b: long-press a deck row to start
+                      // radio from that track. ShuffleTrack already
+                      // carries the engine `trackId`; no pathToId hop
+                      // needed.
+                      onLongPress: () =>
+                          _openRadioSheetForDeckRow(context, t),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 

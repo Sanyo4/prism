@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:prism_core/core.dart';
 import 'package:prism_ui/ui.dart';
 
-import '../screens/mood_results_screen.dart';
-
 /// Selection model for [MoodChipRow]. Two factories:
 ///
-/// - [MoodChipController.single] — slice-4 behaviour: a tap navigates
-///   to `MoodResultsScreen` for that chip and the row never holds a
-///   selection. Home consumes this.
+/// - [MoodChipController.single] — taps fire [onTap] but the row holds
+///   no selection state (visual no-op chip). Slice-11 §C1 retired the
+///   old `MoodResultsScreen` push, so single-mode is now an inert
+///   surface left behind for any future read-only consumer; without
+///   an [onTap] handler the chip taps no-op. The Home consumer of
+///   single-mode was retired in §C2.
 /// - [MoodChipController.multi] — slice-10 behaviour: tap toggles the
 ///   chip in/out of [selected]; [onChanged] fires with the resulting
 ///   set. SongsShuffleTab consumes this.
@@ -17,7 +18,7 @@ import '../screens/mood_results_screen.dart';
 /// `mood_chip_row_test.dart` only asserts the locked visual order and
 /// the FilterChip count, both of which the refactor preserves.
 class MoodChipController {
-  /// Internal mode flag — `false` for slice-4 single push, `true` for
+  /// Internal mode flag — `false` for slice-4 single tap, `true` for
   /// slice-10 multi-select.
   final bool isMulti;
 
@@ -28,23 +29,39 @@ class MoodChipController {
   /// Multi-mode change callback. `null` in single mode.
   final ValueChanged<Set<MoodChip>>? onChanged;
 
+  /// Single-mode tap callback. `null` in multi mode (taps go through
+  /// [onChanged] there).
+  final void Function(MoodChip chip)? onTap;
+
   const MoodChipController._({
     required this.isMulti,
     required this.selected,
     required this.onChanged,
+    required this.onTap,
   });
 
-  /// Slice-4 single-select: tap pushes [MoodResultsScreen]. The
-  /// controller carries no selection state.
-  const MoodChipController.single()
-      : this._(isMulti: false, selected: const <MoodChip>{}, onChanged: null);
+  /// Single-select: tap fires [onTap] (when set). The controller
+  /// carries no selection state. With no [onTap] the chip is inert —
+  /// useful for read-only renders.
+  const MoodChipController.single({void Function(MoodChip chip)? onTap})
+      : this._(
+          isMulti: false,
+          selected: const <MoodChip>{},
+          onChanged: null,
+          onTap: onTap,
+        );
 
   /// Slice-10 multi-select: tap toggles into [initial]. [onChanged]
   /// fires with the resulting set so the parent can refresh its query.
   const MoodChipController.multi({
     required Set<MoodChip> initial,
     required ValueChanged<Set<MoodChip>> onChanged,
-  }) : this._(isMulti: true, selected: initial, onChanged: onChanged);
+  }) : this._(
+          isMulti: true,
+          selected: initial,
+          onChanged: onChanged,
+          onTap: null,
+        );
 }
 
 /// Five Material 3 FilterChips in **locked order**: Happy / Sad / Chill
@@ -97,7 +114,7 @@ class MoodChipRow extends StatelessWidget {
             selected: isSelected,
             label: Text(_label(chip)),
             avatar: Icon(_iconFor(chip), size: 18),
-            onSelected: (_) => _onTap(context, chip),
+            onSelected: (_) => _onTap(chip),
           );
           return Opacity(opacity: dim ? 0.5 : 1.0, child: body);
         },
@@ -105,9 +122,9 @@ class MoodChipRow extends StatelessWidget {
     );
   }
 
-  void _onTap(BuildContext context, MoodChip chip) {
+  void _onTap(MoodChip chip) {
     if (!controller.isMulti) {
-      Navigator.of(context).push(MoodResultsScreen.route(chip));
+      controller.onTap?.call(chip);
       return;
     }
     final next = Set<MoodChip>.from(controller.selected);

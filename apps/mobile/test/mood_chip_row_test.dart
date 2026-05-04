@@ -89,38 +89,32 @@ void main() {
       expect(selection, equals(<MoodChip>{MoodChip.focus}));
     });
 
-    testWidgets('single-select default keeps slice-4 push behaviour',
+    testWidgets('single-select default fires onTap when provided',
         (tester) async {
-      // Smoke-test: tap pushes a route. We verify the route by mounting
-      // a Navigator and listening for push events.
-      final pushed = <Route<dynamic>>[];
+      // Slice-11 §C1 — single-mode no longer pushes a hardcoded route
+      // (the old MoodResultsScreen target was retired). It now fires
+      // the optional [onTap] callback so callers can decide what
+      // happens (or wire nothing for a read-only render).
+      MoodChip? tapped;
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
             theme: PrismTheme.light(),
-            home: const Scaffold(body: MoodChipRow()),
-            navigatorObservers: [
-              _CapturingObserver(onPush: pushed.add),
-            ],
+            home: Scaffold(
+              body: MoodChipRow(
+                controller: MoodChipController.single(
+                  onTap: (chip) => tapped = chip,
+                ),
+              ),
+            ),
           ),
         ),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Happy'));
-      // Pump once to allow the Navigator.push to execute.
       await tester.pump();
-      expect(pushed, isNotEmpty,
-          reason: 'single-mode tap pushes MoodResultsScreen');
+      expect(tapped, MoodChip.happy,
+          reason: 'single-mode tap forwards the chip to onTap');
     });
   });
-}
-
-class _CapturingObserver extends NavigatorObserver {
-  _CapturingObserver({required this.onPush});
-  final void Function(Route<dynamic>) onPush;
-  @override
-  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    onPush(route);
-    super.didPush(route, previousRoute);
-  }
 }

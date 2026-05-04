@@ -1,26 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:prism_playback/playback.dart' show QueueSnapshot, queueProvider;
 
-import 'providers/ai_compose_playback_providers.dart';
 import 'providers/ingest_providers.dart';
-import 'screens/ai_tab.dart';
 import 'screens/home_screen.dart';
 import 'screens/library_screen.dart';
-import 'screens/new_vibe.dart';
 import 'screens/now_playing_screen.dart';
 import 'screens/queue_screen.dart';
 import 'screens/search_screen.dart';
+import 'screens/songs_shuffle_tab.dart';
 import 'shell/app_shell.dart';
 import 'theme/prism_theme.dart';
-import 'widgets/end_of_playlist_sheet.dart';
 
 /// Root widget — [MaterialApp] + the named routes for the top-level
 /// surfaces.
 ///
-/// Restructured to match the wireframe (`wireframe/music/`):
-/// - bottom nav has four tabs (Home / Search / Library / Create) and
-///   `/` is the Home greeting + featured grid surface (was Library);
+/// Slice-11 §C — bottom nav becomes Songs / Home / Search / Library.
+/// The AI / Create slot is retired entirely; the Songs surface (mood-
+/// shuffle deck) is promoted from inside Library to a primary tab. The
+/// AI Compose end-of-queue listener that surfaced [EndOfPlaylistSheet]
+/// is gone with the AI Compose flow.
+///
+/// - bottom nav has four tabs (Songs / Home / Search / Library) and
+///   `/` is the Home greeting + recents surface;
 /// - Now Playing is no longer a bottom tab — the [MiniPlayer] in
 ///   [AppShell] presents [NowPlayingScreen] as a full-screen overlay
 ///   route on tap, matching `wireframe/music/screens/mobile-detail.jsx`;
@@ -53,41 +54,6 @@ class _PrismAppState extends ConsumerState<PrismApp> {
     // off the UI thread; failures are swallowed inside the provider.
     ref.watch(bootIngestProvider);
 
-    // End-of-queue observer (slice 10 §2.3): when the queue drains AND
-    // an AI Compose playback is registered AND the last-known current
-    // was in that playlist, surface EndOfPlaylistSheet and clear the
-    // registered playback state. Cancel ('Done' on the sheet) keeps
-    // the just-finished playlist as the active queue.
-    ref.listen<QueueSnapshot>(queueProvider, (prev, next) {
-      if (prev == null) return;
-      final hadCurrent = prev.current != null;
-      final drained = next.current == null &&
-          next.upcoming.isEmpty &&
-          next.playNext.isEmpty;
-      if (!(hadCurrent && drained)) return;
-      final aiPlayback = ref.read(aiComposePlaybackProvider);
-      if (aiPlayback == null) return;
-      final lastTrack = prev.current!;
-      final partOfAiPlaylist =
-          aiPlayback.tracks.any((t) => t.path == lastTrack.path);
-      if (!partOfAiPlaylist) return;
-      // Schedule the sheet on the next frame so we don't trigger
-      // navigator changes inside a build.
-      //
-      // Clear the registered playback BEFORE showing the sheet so a
-      // swipe-dismiss (which doesn't run either button handler) still
-      // leaves no stale state — preventing a re-trigger on the next
-      // drain. The button handlers still call clear() idempotently as
-      // defense-in-depth; redundant calls are harmless.
-      ref.read(aiComposePlaybackProvider.notifier).clear();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final ctx = _navKey.currentContext;
-        if (ctx == null) return;
-        // ignore: discarded_futures
-        EndOfPlaylistSheet.show(ctx, aiPlayback);
-      });
-    });
-
     return MaterialApp(
       title: 'Prism',
       navigatorKey: _navKey,
@@ -106,17 +72,13 @@ class _PrismAppState extends ConsumerState<PrismApp> {
         AppShell.homeRoute: (_) => const HomeScreen(),
         AppShell.searchRoute: (_) => const SearchScreen(),
         AppShell.libraryRoute: (_) => const LibraryScreen(),
-        AppShell.aiRoute: (_) => const AiTabScreen(),
+        AppShell.songsRoute: (_) => const SongsShuffleTab(),
         // Now Playing is normally pushed as an overlay by the
         // [MiniPlayer] in [AppShell], but the named route is kept so
         // deep links and external Cast handoffs land on the same
         // screen.
         '/now-playing': (_) => const NowPlayingScreen(),
         '/queue': (_) => const QueueScreen(),
-        NewVibeSheet.routeName: (ctx) {
-          final args = ModalRoute.of(ctx)?.settings.arguments;
-          return NewVibeSheet(initialPrompt: args is String ? args : null);
-        },
       },
     );
   }

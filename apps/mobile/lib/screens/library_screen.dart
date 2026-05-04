@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:prism_core/core.dart' show PlaylistRecord;
 import 'package:prism_ui/ui.dart';
 
 import '../browse/album_view.dart';
 import '../browse/artist_view.dart';
-import '../providers/cache_db_providers.dart';
 import '../providers/cast_providers.dart';
 import '../providers/library_view_prefs.dart';
 import '../providers/metadata_providers.dart';
-import '../providers/playlists_provider.dart';
 import '../shell/app_shell.dart';
 import '../widgets/album_tile.dart';
 import '../widgets/artist_tile.dart';
@@ -17,22 +14,22 @@ import '../widgets/library_filter_sheet.dart';
 import '../widgets/responsive_columns.dart';
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
-import 'playlist_detail_screen.dart';
-import 'songs_shuffle_tab.dart';
 
-/// 4-tab Library surface — Albums / Artists / Playlists / Songs.
-/// Tab order is locked; the wireframe (`mobile-browse.jsx`) shows the
-/// same four labels in the same order.
+/// 3-tab Library surface — Albums / Artists / Playlists.
+///
+/// Slice-11 §C3 — the Songs tab promoted out of Library to the bottom
+/// nav (see [AppShell.songsRoute]). Slice-11 §C1 retired the AI Compose
+/// flow, so the Playlists tab renders a placeholder until a future
+/// slice repurposes the `playlists` cache.db table for saved radio
+/// sessions or library favourites.
 ///
 /// Per-tab affordances:
 /// - Albums: 2-col grid (default) or 1-col list — toggled by the
 ///   header's view button. Sort + genre filter via the filter sheet.
 /// - Artists: 3-col avatar grid (default) or 1-col list. Same
 ///   filter-sheet sort + genre filter.
-/// - Playlists: rendered slice-6 sheet content; sort by Created
-///   (newest, default) or Name.
-/// - Songs: SongsShuffleTab — the iPod-shuffle surface (multi-select
-///   MoodChipRow + tempo dropdown + True-Shuffle/Infinite toggles).
+/// - Playlists: placeholder card; pure no-op until a future slice
+///   re-enables a write surface.
 class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
 
@@ -51,8 +48,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         return LibrarySheetTab.artists;
       case 2:
         return LibrarySheetTab.playlists;
-      case 3:
-        return LibrarySheetTab.songs;
       default:
         return LibrarySheetTab.albums;
     }
@@ -97,7 +92,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final tab = _currentSheetTab;
 
     return DefaultTabController(
-      length: 4,
+      length: 3,
       child: Builder(
         builder: (context) {
           final controller = DefaultTabController.of(context);
@@ -143,9 +138,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                       ],
                     ),
                   ),
-                  // Wireframe restricts Library to four tabs (Albums /
-                  // Artists / Playlists / Songs). Random + Vibe are now
-                  // surfaced from the Search → mood tiles + Home mood row.
+                  // Slice-11 §C3 — Library narrows to three tabs;
+                  // Songs lifted out to a primary bottom-nav slot.
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: tokens.s4),
                     child: const TabBar(
@@ -155,7 +149,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                         Tab(text: 'Albums'),
                         Tab(text: 'Artists'),
                         Tab(text: 'Playlists'),
-                        Tab(text: 'Songs'),
                       ],
                     ),
                   ),
@@ -165,7 +158,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                         _AlbumsTab(prefs: prefs),
                         _ArtistsTab(prefs: prefs),
                         const _PlaylistsTab(),
-                        const _SongsTab(),
                       ],
                     ),
                   ),
@@ -313,156 +305,46 @@ class _ArtistsTab extends ConsumerWidget {
   }
 }
 
-class _PlaylistsTab extends ConsumerWidget {
+/// Slice-11 §C1 placeholder — the AI Compose flow that wrote into the
+/// `playlists` cache.db v2 table is retired. The table itself stays
+/// defined (additive migrations don't revert) but is unwritten until a
+/// future slice repurposes it. The `playlistsProvider` and the slice-6
+/// `_PlaylistRow` were removed in the same pass.
+class _PlaylistsTab extends StatelessWidget {
   const _PlaylistsTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.extension<SpaceTokens>()!;
     final scale = theme.extension<TypographyScale>()!;
-    final playlistsAsync = ref.watch(playlistsProvider);
-    final prefs = ref.watch(libraryViewPrefsSyncProvider);
-
-    return playlistsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Playlists error: $e')),
-      data: (playlists) {
-        if (playlists.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: EdgeInsets.all(tokens.s6),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.auto_awesome_outlined,
-                    size: 48,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  SizedBox(height: tokens.s4),
-                  Text(
-                    'No playlists yet.',
-                    style: scale.display20,
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: tokens.s2),
-                  Text(
-                    'Compose one in the Create tab — it lands here when you tap Play.',
-                    style: scale.body16.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(tokens.s6),
+        child: Glass(
+          intensity: GlassIntensity.light,
+          radius: tokens.s4,
+          padding: EdgeInsets.all(tokens.s6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.queue_music_outlined,
+                size: 48,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-            ),
-          );
-        }
-
-        // Apply LibraryViewPrefs.playlistSort.
-        final sorted = List<PlaylistRecord>.of(playlists);
-        switch (prefs.playlistSort) {
-          case PlaylistSort.createdDesc:
-            sorted.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          case PlaylistSort.name:
-            sorted.sort((a, b) =>
-                a.title.toLowerCase().compareTo(b.title.toLowerCase()));
-        }
-
-        return ListView.separated(
-          padding: EdgeInsets.fromLTRB(
-              tokens.s4, tokens.s2, tokens.s4, tokens.s8),
-          itemCount: sorted.length,
-          separatorBuilder: (_, index) => SizedBox(height: tokens.s2),
-          itemBuilder: (context, i) {
-            final playlist = sorted[i];
-            return _PlaylistRow(playlist: playlist);
-          },
-        );
-      },
-    );
-  }
-}
-
-class _PlaylistRow extends ConsumerWidget {
-  const _PlaylistRow({required this.playlist});
-  final PlaylistRecord playlist;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final tokens = theme.extension<SpaceTokens>()!;
-    final scale = theme.extension<TypographyScale>()!;
-    return Glass(
-      intensity: GlassIntensity.medium,
-      radius: tokens.s3,
-      padding: EdgeInsets.zero,
-      child: ListTile(
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: tokens.s4,
-          vertical: tokens.s2,
-        ),
-        leading: Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: theme.colorScheme.primary.withValues(alpha: 0.12),
+              SizedBox(height: tokens.s4),
+              Text(
+                'Library playlists coming back in a future slice.',
+                style: scale.body16,
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
-          child: Icon(
-            Icons.auto_awesome,
-            color: theme.colorScheme.primary,
-          ),
-        ),
-        title: Text(
-          playlist.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: scale.body16.copyWith(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          '${playlist.trackCount} tracks · ${_relativeDate(playlist.createdAt)}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: scale.caption13.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (value) async {
-            if (value == 'delete') {
-              final db = await ref.read(cacheDbProvider.future);
-              await db.playlists.deleteById(playlist.id);
-              ref.invalidate(playlistsProvider);
-            }
-          },
-          itemBuilder: (context) => const [
-            PopupMenuItem(value: 'delete', child: Text('Delete')),
-          ],
-          icon: const Icon(Icons.more_vert),
-        ),
-        onTap: () => Navigator.of(context).push(
-          PlaylistDetailScreen.route(playlist.id),
         ),
       ),
     );
   }
-
-  static String _relativeDate(DateTime dt) {
-    final now = DateTime.now();
-    final delta = now.difference(dt);
-    if (delta.inMinutes < 60) return '${delta.inMinutes}m ago';
-    if (delta.inHours < 24) return '${delta.inHours}h ago';
-    if (delta.inDays < 30) return '${delta.inDays}d ago';
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
-  }
-}
-
-class _SongsTab extends StatelessWidget {
-  const _SongsTab();
-  @override
-  Widget build(BuildContext context) => const SongsShuffleTab();
 }
 
 class _EmptyTab extends StatelessWidget {

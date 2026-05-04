@@ -113,13 +113,13 @@ void main() {
 /// Maps each [AppTab] to its named route in [AppShell].
 String _routeFor(AppTab tab) {
   switch (tab) {
+    case AppTab.songs:
+      return AppShell.songsRoute;
     case AppTab.home:
       return AppShell.homeRoute;
     case AppTab.search:
       return AppShell.searchRoute;
     case AppTab.library:
       return AppShell.libraryRoute;
-    case AppTab.ai:
-      return AppShell.aiRoute;
   }
 }

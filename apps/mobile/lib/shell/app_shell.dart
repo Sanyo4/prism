@@ -9,15 +9,13 @@ import 'settings_screen.dart';
 /// "currently selected tab" bit lives implicitly in the current named
 /// route instead of in a [StatefulWidget] bag of local state.
 ///
-/// Restructured to match the wireframe (`wireframe/music/screens/`)
-/// — Home / Search / Library / Create. The previous MVP order
-/// (tracks / nowPlaying / queue / ai) reflected the older surface
-/// design; the wireframe uses a glass tab pill bar with the four
-/// browse-oriented destinations and surfaces "now playing" through a
-/// MiniPlayer + full-screen overlay rather than a bottom tab.
+/// Slice-11 §C3 — bottom nav reordered. The AI / Create slot is
+/// retired; Songs (the mood-shuffle deck) promotes from inside Library
+/// to a primary tab and lands as the leftmost destination.
 ///
 /// Order is significant — bottom-nav indexes by the enum's index.
-enum AppTab { home, search, library, ai }
+/// New order: songs / home / search / library.
+enum AppTab { songs, home, search, library }
 
 /// Common scaffold for every top-level screen in the app.
 ///
@@ -37,7 +35,7 @@ enum AppTab { home, search, library, ai }
 ///   `NowPlayingScreen` as a full-screen overlay (route push), not a
 ///   bottom-nav tab — matching the wireframe's interaction model.
 /// - Renders the four-item [BottomNavigationBar] whose taps switch
-///   between Home / Search / Library / Create.
+///   between Songs / Home / Search / Library (slice-11 §C3).
 class AppShell extends StatelessWidget {
   const AppShell({
     super.key,
@@ -89,34 +87,33 @@ class AppShell extends StatelessWidget {
   static const homeRoute = '/';
   static const searchRoute = '/search';
   static const libraryRoute = '/library';
-  // Slice 6 — AI tab landing route; rebranded to "Create" in the
-  // wireframe, route name kept stable for back-compat with deep
-  // links and existing settings/widget tests that reference it.
-  static const aiRoute = '/ai';
+  // Slice-11 §C3 — Songs (mood-shuffle deck) promotes from a tab inside
+  // Library to a primary bottom-nav destination.
+  static const songsRoute = '/songs';
 
   static String _routeFor(AppTab tab) {
     switch (tab) {
+      case AppTab.songs:
+        return songsRoute;
       case AppTab.home:
         return homeRoute;
       case AppTab.search:
         return searchRoute;
       case AppTab.library:
         return libraryRoute;
-      case AppTab.ai:
-        return aiRoute;
     }
   }
 
   AuroraVariant _defaultVariantFor(AppTab tab) {
     switch (tab) {
+      case AppTab.songs:
+        return AuroraVariant.library;
       case AppTab.home:
         return AuroraVariant.home;
       case AppTab.search:
         return AuroraVariant.library;
       case AppTab.library:
         return AuroraVariant.library;
-      case AppTab.ai:
-        return AuroraVariant.ai;
     }
   }
 
@@ -186,7 +183,16 @@ class _GlassNavBar extends StatelessWidget {
   final AppTab currentTab;
   final ValueChanged<AppTab> onTap;
 
+  // Slice-11 §C3 — bottom-nav order: Songs · Home · Search · Library.
+  // Songs gains the iPod-shuffle leftmost slot; the AI/Create tab is
+  // retired entirely.
   static const _items = <_NavSpec>[
+    _NavSpec(
+      tab: AppTab.songs,
+      iconOutlined: Icons.shuffle,
+      iconActive: Icons.shuffle,
+      label: 'Songs',
+    ),
     _NavSpec(
       tab: AppTab.home,
       iconOutlined: Icons.home_outlined,
@@ -204,12 +210,6 @@ class _GlassNavBar extends StatelessWidget {
       iconOutlined: Icons.library_music_outlined,
       iconActive: Icons.library_music,
       label: 'Library',
-    ),
-    _NavSpec(
-      tab: AppTab.ai,
-      iconOutlined: Icons.auto_awesome_outlined,
-      iconActive: Icons.auto_awesome,
-      label: 'Create',
     ),
   ];
 

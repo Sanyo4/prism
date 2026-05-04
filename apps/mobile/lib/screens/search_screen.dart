@@ -11,7 +11,6 @@ import '../shell/app_shell.dart';
 import '../widgets/embedded_art.dart';
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
-import 'mood_results_screen.dart';
 
 /// Search — large display title, glass search field, and a 2-col
 /// "Browse by mood" tile grid.
@@ -124,17 +123,16 @@ class _MoodGrid extends StatelessWidget {
 
   // Six lightweight gradient tiles — names match the slice-4 mood
   // chips so tapping into Search → Mood lands on a familiar surface.
-  // The five tiles whose label maps to a [MoodChip] push the matching
-  // [MoodResultsScreen] on tap (consolidated with Home's chip-row push
-  // pattern). "Late Night" has no chip equivalent and falls back to
-  // [MoodChip.chill] — closest match for the slow / unwound vibe.
+  // Slice-11 §C1 retired `MoodResultsScreen`; tapping a tile now
+  // switches to the Songs tab (the new mood-shuffle entry point).
+  // Chip seeding into the Songs notifier is deferred to slice-12.
   static const _tiles = <_MoodTile>[
-    _MoodTile('Happy', Color(0xFFFFD8A8), MoodChip.happy),
-    _MoodTile('Chill', Color(0xFFB8D8FF), MoodChip.chill),
-    _MoodTile('Focus', Color(0xFFD8C8FF), MoodChip.focus),
-    _MoodTile('Energetic', Color(0xFFFFB8C8), MoodChip.energetic),
-    _MoodTile('Sad', Color(0xFFC8D8E8), MoodChip.sad),
-    _MoodTile('Late Night', Color(0xFFB8B8E8), MoodChip.chill),
+    _MoodTile('Happy', Color(0xFFFFD8A8)),
+    _MoodTile('Chill', Color(0xFFB8D8FF)),
+    _MoodTile('Focus', Color(0xFFD8C8FF)),
+    _MoodTile('Energetic', Color(0xFFFFB8C8)),
+    _MoodTile('Sad', Color(0xFFC8D8E8)),
+    _MoodTile('Late Night', Color(0xFFB8B8E8)),
   ];
 
   @override
@@ -150,9 +148,8 @@ class _MoodGrid extends StatelessWidget {
       children: _tiles
           .map((t) => _MoodCard(
                 tile: t,
-                onTap: () => Navigator.of(context).push(
-                  MoodResultsScreen.route(t.chip),
-                ),
+                onTap: () => Navigator.of(context)
+                    .pushReplacementNamed(AppShell.songsRoute),
               ))
           .toList(),
     );
@@ -160,13 +157,9 @@ class _MoodGrid extends StatelessWidget {
 }
 
 class _MoodTile {
-  const _MoodTile(this.label, this.color, this.chip);
+  const _MoodTile(this.label, this.color);
   final String label;
   final Color color;
-
-  /// `MoodChip` to push when this tile is tapped — drives the
-  /// [MoodResultsScreen] navigation (consolidated with Home).
-  final MoodChip chip;
 }
 
 class _MoodCard extends StatelessWidget {
@@ -174,9 +167,8 @@ class _MoodCard extends StatelessWidget {
 
   final _MoodTile tile;
 
-  /// Tap handler. Set by [_MoodGrid] to push [MoodResultsScreen] for
-  /// the tile's mood. Wrapped in [InkWell] so the gradient + glass
-  /// styling underneath is preserved.
+  /// Tap handler. Set by [_MoodGrid] to switch to the Songs tab —
+  /// slice-11 §C1 retired the old `MoodResultsScreen` push.
   final VoidCallback? onTap;
 
   @override
