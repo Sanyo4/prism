@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'app.dart';
 import 'audio/audio_handler.dart';
@@ -17,6 +18,13 @@ import 'providers/playback_providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Slice-10c §C3 — initialize sqflite_common_ffi for ALL platforms
+  // (Android now too, not just desktop). sqfliteFfiInit() is idempotent
+  // + safe to call once at startup. Must be called BEFORE the first
+  // databaseFactoryFfi.openDatabase(...) call (which happens lazily
+  // when cacheDbProvider is first read after mount).
+  sqfliteFfiInit();
 
   // Slice 7 — typography is Space Grotesk (matching the design
   // bundle at /tmp/prism-design-extract/...). `google_fonts` fetches

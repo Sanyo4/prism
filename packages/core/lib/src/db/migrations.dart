@@ -1,6 +1,9 @@
 import 'package:sqflite_common/sqflite.dart';
 
-import 'vec_loader.dart';
+// Vec0Loader is NOT imported here — vec0 DDL is no longer run inside
+// any migration step. The import is kept as a comment so the next
+// engineer knows the removal was deliberate, not accidental.
+// import 'vec_loader.dart';
 
 /// Linear schema migrations for `cache.db`. Slice 4 ships v1; later
 /// slices append numbered steps without rewriting old ones.
@@ -146,26 +149,30 @@ class Migrations {
     await txn.execute('CREATE INDEX tracks_mood_party   ON tracks(mood_party)');
     await txn.execute('CREATE INDEX tracks_bpm          ON tracks(bpm)');
 
-    // Slice-10b §A1 — skip vec0 DDL when the shared library failed to
-    // load; the table can be created on a subsequent open once the
-    // binary is repaired (Task A2).
-    if (Vec0Loader.loadFailed) {
-      // ignore: avoid_print
-      print(
-        '[Migrations._v1] vec0 load failed — skipping track_embeddings DDL. '
-        'Reason: ${Vec0Loader.loadFailureMessage}',
-      );
-    } else {
-      await createVec0Table(txn);
-    }
+    // Slice-10b §A1' — vec0 DDL is NOT created inside the migration. On
+    // Android, sqflite uses the system SQLite which doesn't see
+    // extensions registered via package:sqlite3.ensureExtensionLoaded.
+    // Running the vec0 DDL inside the migration would crash open() on
+    // Android even when the .so was 'loaded' on the FFI side. Instead,
+    // CacheDb.open attempts the DDL OUTSIDE the migration, after the
+    // writer is committed, in its own try-catch. Failure sets
+    // Vec0Loader.loadFailed = true and the app continues in degraded
+    // mode (mood/vibe/library work; radio unavailable).
   }
 }
 
-/// Slice-10b §A1 — vec0 virtual-table DDL is split out so that
-/// `_v1` can skip it gracefully when `Vec0Loader.loadFailed == true`.
+/// Slice-10b §A1' — vec0 virtual-table DDL extracted from the
+/// migration so it can be called OUTSIDE the migration step, in its
+/// own try-catch, after the writer is open. Uses `IF NOT EXISTS` so
+/// the call is idempotent across cold launches and re-opens.
+///
+/// Called by [CacheDb.open] after the writer handle is committed and
+/// before the FFI reader is opened. Failure there sets
+/// [Vec0Loader.loadFailed] without throwing; the app degrades
+/// gracefully (mood/vibe/library OK; radio unavailable).
 Future<void> createVec0Table(DatabaseExecutor txn) async {
   await txn.execute('''
-    CREATE VIRTUAL TABLE track_embeddings USING vec0(
+    CREATE VIRTUAL TABLE IF NOT EXISTS track_embeddings USING vec0(
       track_id  INTEGER PRIMARY KEY,
       embedding FLOAT[1280]
     )

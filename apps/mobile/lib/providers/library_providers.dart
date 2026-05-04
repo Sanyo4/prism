@@ -89,7 +89,7 @@ Future<void> _reconcile(
 
 /// Tracks discovered by walking [libraryRootProvider].
 ///
-/// Slice-10b §D3 — two-phase cold-start:
+/// Slice-10b §D3' — two-phase cold-start with DB-failure fallback:
 ///
 /// **Phase 1 (warm read):** Reads from `tracks_cache` immediately.
 /// Emits the cached list to consumers in <10 ms on subsequent
@@ -103,6 +103,19 @@ Future<void> _reconcile(
 /// - Paths missing from the live set are deleted.
 /// - This provider is then invalidated so consumers see the fresh
 ///   data.
+///
+/// **DB-failure fallback (slice-10b §D3'):** If [cacheDbProvider]
+/// throws (e.g. the vec0 migration crash on Android before §A1' was
+/// applied, or any other DB open failure), the warm-cache read is
+/// skipped and [scanInIsolate] is called directly — the same
+/// pre-D3 behaviour that always worked regardless of cache.db health.
+/// Albums / Artists / Library all continue to render even when
+/// cache.db is broken.
+///
+/// **First-launch sync scan:** When the cache is empty (first install
+/// or after a DB wipe), the live scan runs synchronously so the first
+/// frame shows tracks immediately rather than an empty grid waiting
+/// for the Phase-2 side-effect to finish.
 ///
 /// **Pattern chosen:** `FutureProvider<List<Track>>` + side-effect
 /// kick-off + `ref.invalidate`. This preserves the `AsyncValue<List<Track>>`
@@ -120,16 +133,35 @@ Future<void> _reconcile(
 /// re-scans or symlinked directories that surface the same file twice
 /// collapse to one entry.
 final tracksProvider = FutureProvider<List<Track>>((ref) async {
-  final db = await ref.watch(cacheDbProvider.future);
   final root = await ref.watch(libraryRootProvider.future);
 
   // Wipe prior failures at the start of each (re-)scan.
   ref.read(libraryScanFailuresProvider.notifier).reset();
 
+  // Try the warm-cache path. If cache.db is unhealthy (e.g. vec0 DDL
+  // crash on Android before §A1' landed, or any other open failure),
+  // fall through to a direct isolate scan so albums still load.
+  // Slice-10b §D3' — wraps the D3 warm-cache read in try-catch.
+  CacheDb? db;
+  try {
+    db = await ref.read(cacheDbProvider.future);
+  } catch (e) {
+    // ignore: avoid_print
+    print('tracksProvider: cache.db unavailable, falling back to '
+        'direct FS scan: $e');
+    // No cache → just scan and return. Albums/Artists still render.
+    try {
+      return await scanInIsolate(root);
+    } catch (scanErr, scanSt) {
+      Error.throwWithStackTrace(scanErr, scanSt);
+    }
+  }
+
   // Phase 1: warm read from tracks_cache.
   // On first install this is empty; subsequent launches return the
   // persisted list immediately without any FS I/O.
-  final cached = await db.tracksCache.readAll();
+  // db is non-null here: the catch block always returns or rethrows.
+  final cached = await db!.tracksCache.readAll();
 
   // Phase 2: background live scan. Only kick off one scan at a time.
   // When the FutureProvider is invalidated after the scan finishes,
@@ -140,7 +172,7 @@ final tracksProvider = FutureProvider<List<Track>>((ref) async {
     () async {
       try {
         final live = await scanInIsolate(root);
-        await _reconcile(db, live);
+        await _reconcile(db!, live);
         // Invalidate so consumers rebuild with the fresh cache data.
         ref.invalidateSelf();
       } catch (_) {
@@ -150,6 +182,22 @@ final tracksProvider = FutureProvider<List<Track>>((ref) async {
         _scanInFlight = false;
       }
     }();
+  }
+
+  // First cold launch when cache is empty: if Phase 2 hasn't populated
+  // yet, run the scan synchronously so albums DO appear on first launch
+  // (instead of an empty grid waiting for the side-effect to finish).
+  if (cached.isEmpty) {
+    try {
+      final live = await scanInIsolate(root);
+      await _reconcile(db, live);
+      return live;
+    } catch (e) {
+      // Scan failed too — return empty rather than crash.
+      // ignore: avoid_print
+      print('tracksProvider first-launch scan failed: $e');
+      return const <Track>[];
+    }
   }
 
   // Return the warm-cache payload immediately. If this is the second

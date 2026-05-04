@@ -20,8 +20,9 @@ import 'vibe_shuffle_query.dart';
 ///    don't want to fight sqflite's per-call serialisation.
 ///
 /// `vec0` is registered process-wide via `Vec0Loader.ensureLoaded`
-/// *before* either handle opens; sqflite picks it up automatically
-/// when its internal connection pool spins up.
+/// *before* either handle opens. After slice-10c §C3, both Android
+/// and Linux use `sqflite_common_ffi` → `package:sqlite3`, so the
+/// writer shares the same extension registry and sees vec0.
 class CacheDb {
   CacheDb._({
     required this.writer,
@@ -39,8 +40,8 @@ class CacheDb {
   /// Synchronous FFI read handle. `vec0` MATCH queries go here.
   final ffi.Database reader;
 
-  /// Open / create [path] using [factory] (sqflite for Android,
-  /// sqflite_common_ffi for Linux + tests). [vec0Path] resolves the
+  /// Open / create [path] using [factory] (sqflite_common_ffi for Android
+  /// after slice-10c §C3, and for Linux + tests). [vec0Path] resolves the
   /// platform-specific `vec0.so` — pass [Vec0Loader.resolvePath] on
   /// Linux desktop, or a manually-copied asset path on Android.
   ///
@@ -96,6 +97,34 @@ class CacheDb {
         },
       ),
     );
+
+    // Slice-10c §C1 — vec0 DDL OUTSIDE the migration. After C3 lands,
+    // Android's writer goes through sqflite_common_ffi → package:sqlite3
+    // (the same SQLite + extension registry that Vec0Loader.ensureLoaded
+    // registers vec0 with), so this succeeds on Android too. The try-catch
+    // is kept as defense-in-depth: if vec0 somehow isn't visible on the
+    // writer connection (future regression, corrupt asset, etc.) we degrade
+    // gracefully rather than crashing. The IF NOT EXISTS guard makes the
+    // call idempotent across cold launches.
+    if (!Vec0Loader.loadFailed) {
+      try {
+        await writer.execute('''
+          CREATE VIRTUAL TABLE IF NOT EXISTS track_embeddings USING vec0(
+            track_id INTEGER PRIMARY KEY,
+            embedding FLOAT[1280]
+          )
+        ''');
+      } catch (e) {
+        Vec0Loader.loadFailed = true;
+        Vec0Loader.loadFailureMessage =
+            'vec0 not registered on writer connection: $e';
+        // ignore: avoid_print
+        print(
+          'CacheDb.open: vec0 DDL failed → degraded mode '
+          '(mood/vibe/library OK; radio unavailable): $e',
+        );
+      }
+    }
 
     // Read handle: `package:sqlite3` FFI. Same file, opened
     // independently. WAL means cross-handle reads see committed

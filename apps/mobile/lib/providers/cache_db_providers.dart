@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:prism_core/core.dart';
-import 'package:sqflite/sqflite.dart' as sqflite;
 import 'package:sqflite_common/sqflite.dart' show DatabaseFactory;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' as ffi;
 
@@ -80,10 +79,17 @@ double? Function(Track) measuredRgLookupOf(Ref ref) {
 // --- platform plumbing -----------------------------------------------------
 
 Future<DatabaseFactory> _resolveDatabaseFactory() async {
-  if (Platform.isAndroid) {
-    return sqflite.databaseFactory;
-  }
-  ffi.sqfliteFfiInit();
+  // Slice-10c §C3 — Android also uses databaseFactoryFfi via
+  // sqflite_common_ffi + sqlite3_flutter_libs (bundled libsqlite3.so).
+  // This puts the writer through package:sqlite3, which shares its
+  // extension registry with the reader and with Vec0Loader.ensureLoaded.
+  // Result: vec0 is actually visible to the writer's connection on
+  // Android (it wasn't with package:sqflite's system-sqlite path), so
+  // CREATE VIRTUAL TABLE track_embeddings USING vec0(...) works during
+  // the post-open DDL on Android for the first time.
+  //
+  // sqfliteFfiInit() is called once in main.dart before runApp; this
+  // function just returns the factory — the init step is not repeated here.
   return ffi.databaseFactoryFfi;
 }
 
