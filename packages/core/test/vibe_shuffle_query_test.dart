@@ -74,7 +74,22 @@ void main() {
       }
     });
 
-    test('true-shuffle on bypasses chip filtering', () async {
+    test('true-shuffle on with zero chips returns all ready rows', () async {
+      final ctx = await openFreshTestDb();
+      addTearDown(ctx.teardown);
+      await _seedSixTracks(ctx.db);
+      final filtered = await VibeShuffleQuery(ctx.db).run(
+        chips: const <MoodChip>{},
+        band: null,
+        trueShuffle: true,
+      );
+      // Zero chips + true-shuffle: uniformly-random ready set.
+      expect(filtered, hasLength(6));
+    });
+
+    test(
+        'true-shuffle on with non-empty chips still filters by chipExpression '
+        '(slice-11 §B2 fix for the slice-10b D bypass bug)', () async {
       final ctx = await openFreshTestDb();
       addTearDown(ctx.teardown);
       await _seedSixTracks(ctx.db);
@@ -83,8 +98,24 @@ void main() {
         band: null,
         trueShuffle: true,
       );
-      // True-shuffle ignores chips and returns all 6 ready rows.
-      expect(filtered, hasLength(6));
+      // Same chip filter as the deterministic single-chip test: rows
+      // must satisfy the > 0.5 floor. Order is random (we don't assert
+      // it) but the eligible set is identical.
+      expect(filtered, isNotEmpty);
+      expect(
+        filtered.length,
+        lessThan(6),
+        reason: 'chip filter must still constrain the set under True-Shuffle',
+      );
+      for (final row in filtered) {
+        expect(
+          row.score,
+          greaterThan(0.5),
+          reason:
+              'True-Shuffle ON must not bypass the chip-expression filter — '
+              'shuffle randomises order, not the eligible set.',
+        );
+      }
     });
 
     test('respects LIMIT 1000 cap', () async {

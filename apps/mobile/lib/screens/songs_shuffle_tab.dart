@@ -10,13 +10,21 @@ import '../providers/songs_shuffle_providers.dart';
 import '../widgets/mood_chip_row.dart';
 import 'radio_context_sheet.dart';
 
-/// Slice 10 §2.2 — Library → Songs is the iPod-shuffle surface.
+/// Slice 10 §2.2 + slice-11 §B2 — Library → Songs is the iPod-shuffle
+/// surface. The mood chip row is multi-select again: tapping a chip
+/// toggles it in/out of the deck filter. Selected chips constrain the
+/// `VibeShuffleQuery` eligible set under both True-Shuffle and Tempo
+/// modes (the slice-10b D bypass bug is fixed in
+/// `vibe_shuffle_query.dart` — True-Shuffle randomises *order*, not the
+/// *eligible set*).
+///
 /// Top: big Shuffle Play CTA + True Shuffle + Infinite toggles.
-/// Middle: a single-select mood chip row (consolidated with Home/Search
-/// — tap a chip to push `MoodResultsScreen` for that mood) + tempo
-/// dropdown.
+/// Middle: "Pick a vibe" header + multi-select chip row (dimmed when
+/// True Shuffle is on, as a visual hint that scoring is bypassed but
+/// the filter still applies) + tempo dropdown.
 /// Bottom: live deck list. Tap a row to play from there; the rest of
-/// the visible deck loads as the queue tail.
+/// the visible deck loads as the queue tail. Long-press a row → the
+/// 3-tile RadioContextSheet (Play Next / Add to Queue / Start Radio).
 class SongsShuffleTab extends ConsumerStatefulWidget {
   const SongsShuffleTab({super.key});
 
@@ -126,10 +134,12 @@ class _SongsShuffleTabState extends ConsumerState<SongsShuffleTab> {
             ],
           ),
         ),
-        // "Pick a vibe" header + single-select chip row. Consolidated
-        // with the Home/Search pattern: tapping a chip pushes
-        // `MoodResultsScreen` for that mood (default `MoodChipRow`
-        // controller is `single()`).
+        // Slice-11 §B2 — "Pick a vibe" header + multi-select chip row.
+        // Tapping a chip toggles it in/out of `state.chips`; the deck
+        // below reflows live. `dim: state.trueShuffle` is a visual hint
+        // that True-Shuffle randomises ordering — the chip filter still
+        // applies (slice-10b D bypass bug fixed in
+        // VibeShuffleQuery.run).
         Padding(
           padding:
               EdgeInsets.symmetric(horizontal: tokens.s4, vertical: tokens.s1),
@@ -141,7 +151,14 @@ class _SongsShuffleTabState extends ConsumerState<SongsShuffleTab> {
             ),
           ),
         ),
-        const MoodChipRow(),
+        MoodChipRow(
+          controller: MoodChipController.multi(
+            initial: state.chips,
+            onChanged: (chips) =>
+                ref.read(songsShuffleStateProvider.notifier).setChips(chips),
+          ),
+          dim: state.trueShuffle,
+        ),
         // Tempo dropdown row.
         Padding(
           padding:

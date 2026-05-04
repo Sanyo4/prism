@@ -43,19 +43,88 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Shuffle play'), findsOneWidget);
     expect(find.text('True Shuffle'), findsOneWidget);
-    // Vibe header consolidated to single-select push pattern.
+    // Slice-11 §B2 — Pick a vibe header sits above the multi-select
+    // chip row.
     expect(find.text('Pick a vibe'), findsOneWidget);
   });
 
   testWidgets(
-    'tapping a chip pushes a new route (single-select consolidation)',
+    'slice-11 §B2: tapping chips toggles them in/out of state.chips',
     (tester) async {
+      // Watch the notifier directly — we don't want the FilterChip
+      // rebuilds to depend on the deck rebuilding (the deck is empty
+      // for this test).
+      late ProviderContainer container;
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             shuffleDeckProvider.overrideWith(
               (ref) async => const <ShuffleTrack>[],
             ),
+          ],
+          child: Consumer(
+            builder: (context, ref, _) {
+              // Capture the container the first time the build runs.
+              container = ProviderScope.containerOf(context);
+              return MaterialApp(
+                theme: PrismTheme.light(),
+                home: const Scaffold(body: SongsShuffleTab()),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Empty initial set.
+      expect(
+        container.read(songsShuffleStateProvider).chips,
+        isEmpty,
+      );
+
+      // Tap Happy → {happy}.
+      await tester.tap(find.text('Happy'));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(songsShuffleStateProvider).chips,
+        equals(<MoodChip>{MoodChip.happy}),
+      );
+
+      // Tap Energetic → {happy, energetic}.
+      await tester.tap(find.text('Energetic'));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(songsShuffleStateProvider).chips,
+        equals(<MoodChip>{MoodChip.happy, MoodChip.energetic}),
+      );
+
+      // Tap Happy again → {energetic} (toggle off).
+      await tester.tap(find.text('Happy'));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(songsShuffleStateProvider).chips,
+        equals(<MoodChip>{MoodChip.energetic}),
+      );
+    },
+  );
+
+  testWidgets(
+    'slice-11 §B2: chips pass through to shuffleDeckProvider under '
+    'True-Shuffle ON (no slice-10b D bypass regression)',
+    (tester) async {
+      // Capture every chips/trueShuffle pair the deck provider sees.
+      final seen = <({Set<MoodChip> chips, bool trueShuffle})>[];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            shuffleDeckProvider.overrideWith((ref) async {
+              final state = ref.watch(songsShuffleStateProvider);
+              seen.add((
+                chips: Set<MoodChip>.from(state.chips),
+                trueShuffle: state.trueShuffle,
+              ));
+              return const <ShuffleTrack>[];
+            }),
           ],
           child: MaterialApp(
             theme: PrismTheme.light(),
@@ -65,23 +134,27 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Sanity: nothing pushed yet, so canPop() is false.
-      var navigator = tester.state<NavigatorState>(find.byType(Navigator));
-      expect(navigator.canPop(), isFalse);
+      // Toggle True-Shuffle on first.
+      await tester.tap(find.byKey(const Key('songs.trueShuffleToggle')));
+      await tester.pumpAndSettle();
+      // Then select Happy.
+      await tester.tap(find.text('Happy'));
+      await tester.pumpAndSettle();
 
-      // Tap Chill. The default (single-select) MoodChipRow controller
-      // navigates to MoodResultsScreen. We don't pumpAndSettle because
-      // MoodResultsScreen reads cache-db-dependent providers we haven't
-      // overridden — the screen sits in a loading state forever. A few
-      // frames are enough to push the route.
-      await tester.tap(find.text('Chill'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-
-      navigator = tester.state<NavigatorState>(find.byType(Navigator));
-      expect(navigator.canPop(), isTrue,
-          reason:
-              'Tapping a chip should push MoodResultsScreen onto the navigator.');
+      // The most recent provider invocation must show True-Shuffle ON
+      // AND chips containing Happy. This is the regression guard for
+      // the slice-10b D bypass — under that bug the deck was queried
+      // with the chip filter dropped.
+      expect(seen, isNotEmpty);
+      final last = seen.last;
+      expect(last.trueShuffle, isTrue);
+      expect(
+        last.chips,
+        equals(<MoodChip>{MoodChip.happy}),
+        reason:
+            'True-Shuffle ON must NOT drop the chip filter — slice-11 §B2 '
+            'closes the slice-10b D bypass bug.',
+      );
     },
   );
 

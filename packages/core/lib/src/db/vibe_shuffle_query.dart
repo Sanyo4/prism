@@ -49,9 +49,17 @@ class VibeShuffleQuery {
   /// "1 chip filter: WHERE `<chip.expr> > 0.5`".
   static const double singleChipFloor = 0.5;
 
-  /// Returns the deck under the chip set + tempo band. When [trueShuffle]
-  /// is true, [chips] is ignored and a uniformly-random deck of
-  /// `status='ready'` rows is returned.
+  /// Returns the deck under the chip set + tempo band.
+  ///
+  /// Three branches:
+  /// 1. **True-Shuffle ON, zero chips** — uniformly-random `status='ready'`
+  ///    deck (with optional tempo band).
+  /// 2. **True-Shuffle ON, non-empty chips** *(slice-11 §B2)* — chip
+  ///    filter still applies, but rows are randomised instead of
+  ///    score-ranked. This closes the slice-10b D bypass bug where
+  ///    True-Shuffle dropped the chip filter entirely.
+  /// 3. **True-Shuffle OFF** — chip-aware filter / bias mode (existing
+  ///    slice-10 §2.2 behaviour).
   Future<List<ShuffleTrack>> run({
     required Set<MoodChip> chips,
     required TempoBand? band,
@@ -64,7 +72,9 @@ class VibeShuffleQuery {
       whereParts.add(_bandPredicate(band));
     }
 
-    if (trueShuffle || chips.isEmpty) {
+    if (chips.isEmpty) {
+      // Branch 1: zero chips. trueShuffle is implied — there's no chip
+      // signal to rank by, so we return a uniformly-random ready set.
       final sql = '''
         SELECT id, path, title, artist, album, bpm, added_at
           FROM tracks
@@ -87,24 +97,56 @@ class VibeShuffleQuery {
       ];
     }
 
-    // Build the score expression: single chip = its expression; many
-    // chips = additive sum. Identical chip-expression strings either way.
+    // Build the chip filter clause. Reused by both True-Shuffle ON and
+    // OFF branches below — slice-11 §B2 invariant: chip filter applies
+    // identically in both, only the ORDER BY differs.
     final chipExprs =
         chips.map(MoodQuery.chipExpression).toList(growable: false);
     final scoreExpr = chipExprs.length == 1
         ? chipExprs.first
         : '(${chipExprs.join(' + ')})';
-    if (chipExprs.length == 1) {
-      whereParts.add('($scoreExpr) > $singleChipFloor');
-    } else {
-      whereParts.add('($scoreExpr) > 0');
+    final chipWhereParts = List<String>.from(whereParts)
+      ..add(
+        chipExprs.length == 1
+            ? '($scoreExpr) > $singleChipFloor'
+            : '($scoreExpr) > 0',
+      );
+
+    if (trueShuffle) {
+      // Branch 2: chips constrain the set, ORDER BY RANDOM() shuffles
+      // the order. score is the chip-expression value so consumers
+      // (e.g. trailing widgets) can still surface intensity if needed.
+      final sql = '''
+        SELECT id, path, title, artist, album, bpm, added_at,
+               ($scoreExpr) AS score
+          FROM tracks
+         WHERE ${chipWhereParts.join(' AND ')}
+         ORDER BY RANDOM()
+         LIMIT $deckLimit
+      ''';
+      final rows = await _db.writer.rawQuery(sql);
+      return [
+        for (final r in rows)
+          ShuffleTrack(
+            trackId: r['id'] as int,
+            path: r['path'] as String,
+            title: r['title'] as String?,
+            artist: r['artist'] as String?,
+            album: r['album'] as String?,
+            score: (r['score'] as num?)?.toDouble() ?? 0.0,
+            bpm: (r['bpm'] as num?)?.toDouble(),
+          ),
+      ];
     }
 
+    // Branch 3: True-Shuffle OFF, chips non-empty. Slice-10 §2.2
+    // chip-aware filter / bias mode. ORDER BY score then re-rank in
+    // Dart by recency to mirror MoodQuery's two-phase rank.
     final sql = '''
       SELECT id, path, title, artist, album, bpm, added_at,
              ($scoreExpr) AS score
         FROM tracks
-       WHERE ${whereParts.join(' AND ')}
+       WHERE ${chipWhereParts.join(' AND ')}
        ORDER BY score DESC
        LIMIT $deckLimit
     ''';
