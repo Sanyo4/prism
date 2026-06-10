@@ -1,0 +1,26 @@
+name: prism_workspace
+description: >-
+  Prism — local-first Flutter music player (Android + Linux) with a sibling
+  Python sonic-analysis indexer. This root pubspec is the Dart `workspace`
+  anchor; individual packages live under `packages/` and apps live under
+  `apps/`.
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+
+workspace:
+  - apps/mobile
+  - packages/cast
+  - packages/core
+  - packages/llm_desktop
+  - packages/llm_mobile
+  - packages/metadata
+  - packages/playback
+  - packages/playlist_engine
+  - packages/ui
+
+dev_dependencies:
+  melos: ^7.5.0
+  lints: ^6.0.0
+  test: ^1.25.0

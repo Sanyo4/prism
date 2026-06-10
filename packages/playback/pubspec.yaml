@@ -1,0 +1,36 @@
+name: prism_playback
+description: >-
+  Prism playback — `just_audio` + `audio_service` wrapper, three-zone queue,
+  tag-embedded ReplayGain volume scaling. Consumed by `apps/mobile`.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.11.0
+  flutter: ">=3.27.0"
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  just_audio: ^0.10.5
+  audio_service: ^0.18.18
+  flutter_riverpod: ^3.0.1
+  prism_core: any
+  # Slice-4: PlaybackService takes an optional CacheDb at construction
+  # time so it can prefer measured RG over tag RG when status='ready'.
+  # The CacheDb type lives in prism_core; this dep is transitively
+  # already satisfied by `prism_core: any` but we don't repeat
+  # sqflite/sqlite3 here — playback only sees the Dart-typed handle.
+  # Slice 9 — `PlaybackService` holds a `CastTransport currentTransport`
+  # for the slice-9 transport seam. The default transport wraps the
+  # slice-1 `AudioPlayerPort` via a `LocalAudioHandle` adapter so the
+  # slice-1 surface is unchanged; non-Local transports (DLNA /
+  # Chromecast) live in `prism_cast` and route audio off-device.
+  prism_cast: any
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

@@ -90,7 +90,7 @@ to refresh" section:
 - **Flutter** stable channel, Dart 3+.
 - **State:** Riverpod (picked in slice 1, locked for the whole app).
 - **Audio:** `just_audio` + `audio_service`.
-- **Tags:** `audiotags`.
+- **Tags:** `audio_metadata_reader` (pure Dart; exposes ReplayGain fields + raw custom-tag map, so it satisfies the "only tag-embedded values in slice 1" invariant that `audiotags` 1.4.5 cannot).
 - **DB:** `sqflite` + `sqlite3_flutter_libs` + `sqlite-vec` (FFI).
 - **HTTP:** `dio`.
 - **Images:** `cached_network_image`.

@@ -1,0 +1,32 @@
+name: prism_llm_mobile
+description: >-
+  Cactus-backed LlmBackend for Android (Qwen3-1.7B INT4, on-device,
+  offline). Pure Dart wrapper; the native side runs only on Android
+  arm64. Linux desktop falls through to slice 6's Ollama backend
+  per `apps/mobile`'s platform switch.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.11.0
+
+resolution: workspace
+
+dependencies:
+  # Pinned (caret-less) per slice-8 §10 risk 5: Cactus SDK API drift
+  # is mitigated by upgrading only alongside a fresh §4 doc refresh
+  # plus a manual §11 verification run on a Pixel 9 Pro Fold.
+  cactus: 1.3.0
+  dio: ^5.7.0
+  crypto: ^3.0.6
+  # `package:convert` ships `AccumulatorSink<Digest>`, the streaming
+  # sink slice-8 §4 (crypto refresh) calls for. Crypto re-exports
+  # the digest types but not the sink.
+  convert: ^3.1.2
+  path_provider: ^2.1.5
+  meta: ^1.16.0
+  prism_playlist_engine: any
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^6.0.0

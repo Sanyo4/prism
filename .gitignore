@@ -1,0 +1,64 @@
+# Dart / Flutter
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+pubspec.lock
+
+# Flutter-specific generated files (inside apps/mobile once Step 2 runs)
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+**/ios/
+**/macos/
+**/windows/
+**/web/
+**/.idea/
+**/*.iml
+
+# Melos
+.fvm/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Scratch / ephemeral per-session notes (see Doc refresh protocol)
+scratch/
+api-summary-*.md
+
+# Worktrees
+.worktrees/
+
+# Python (apps/indexer)
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Indexer test fixtures — generated on demand from ffmpeg by
+# tests/conftest.py, never committed (deterministic + regenerable).
+apps/indexer/tests/fixtures/library/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Wireframe — track only the JSX source the spec references
+# (wireframe/music/screens/*.jsx + frames/ + ui/ + data/). Skip:
+#   - the redundant zip archive,
+#   - any *Standalone*.html (1.4M bundled export, regenerable),
+#   - paste-artifact uploads (1MB+ screenshots, regenerable).
+# The two non-Standalone HTMLs (≤24K) stay because they're tiny and
+# carry the exact prop wiring the .jsx files expand into.
+wireframe/music.zip
+wireframe/*.html
+wireframe/music/*Standalone*.html
+wireframe/music/uploads/

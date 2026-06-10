@@ -1,0 +1,22 @@
+name: prism_playlist_engine
+description: >-
+  Pure-Dart playlist + radio engines. Zero Flutter, zero dart:io,
+  zero sqlite3. Talks to the world through a PlaylistRepo port —
+  packages/core ships the SQLite-backed implementation. Slice 5
+  introduces RadioEngine; slice 6 reuses FlowScorer + Camelot for
+  the LLM-driven PlaylistEngine.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.11.0
+
+resolution: workspace
+
+dependencies:
+  meta: ^1.16.0
+  collection: ^1.19.0
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^6.0.0

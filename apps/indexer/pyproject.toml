@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prism-indexer"
+version = "0.1.0"
+description = "Prism sonic-analysis indexer — Linux x86_64 only. Walks a music folder and writes .sonic.json sidecars next to each audio file via Essentia + TensorFlow."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "Prism authors" }]
+keywords = ["essentia", "music", "ml", "sidecar", "prism"]
+
+# Runtime deps — slice 3 §12 contract. `essentia-tensorflow` is the
+# manylinux2014 wheel that bundles Essentia + TF 2.x; the plain
+# `essentia` wheel ships without TF and the classifiers fail silently.
+dependencies = [
+  "click>=8.1",
+  "tqdm>=4.66",
+  "numpy>=1.26",
+]
+
+# Phase A keeps the heavy `essentia-tensorflow` dep optional so the
+# scaffold is unit-testable without ~250 MB of wheels. Phase B (steps
+# 7-13) adds it to a default `analysis` extra and the README points
+# users at it. Once the install pattern is verified, this graduates to
+# a base dep.
+[project.optional-dependencies]
+analysis = [
+  # Pin allows the dev-tagged manylinux2014_x86_64 wheel published on
+  # PyPI (e.g. `2.1b6.dev1389`). PEP 440 ordering treats dev releases
+  # as <final, so a plain `>=2.1b6` excludes the only published wheel.
+  # The pre-release-friendly spec lets pip resolve `2.1b6.dev1389` on
+  # CPython 3.11 / 3.12 manylinux.
+  "essentia-tensorflow>=2.1b6.dev0",
+]
+test = [
+  "pytest>=7.4",
+  "pytest-mock>=3.12",
+]
+
+[project.scripts]
+prism-indexer = "indexer.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["indexer*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+addopts = "-ra -q"
+testpaths = ["tests"]

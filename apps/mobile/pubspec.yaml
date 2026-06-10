@@ -1,0 +1,111 @@
+name: mobile
+description: >-
+  Prism mobile — Flutter app targeting Android and Linux desktop. Depends
+  on `prism_core` (scanner + models) and `prism_playback` (just_audio +
+  queue wrappers). Part of the Prism workspace; resolution is handled by
+  the root `pubspec.yaml`.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.0
+  flutter: ">=3.27.0"
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Prism workspace packages
+  prism_core: any
+  prism_llm_desktop: any
+  # Slice 8 — Cactus-backed LlmBackend for Android. The package is
+  # always a dep; its runtime side is gated to Android via the
+  # ProviderScope override in `main.dart`, so Linux desktop pays
+  # only the static-analysis cost (Cactus's pub.dev surface is
+  # platform-agnostic at the Dart level — native binaries are
+  # Android-only).
+  prism_llm_mobile: any
+  prism_metadata: any
+  prism_playback: any
+  prism_playlist_engine: any
+  # Slice 7 — Track A's UI primitives (typography, spacing, palette,
+  # Glass, AuroraBackground, hero tag builders). Track B (this app)
+  # composes them into ThemeData via `lib/theme/prism_theme.dart`.
+  prism_ui: any
+  # Slice 9 — Cast & DLNA package. UI consumes `LocalTransport`,
+  # `DlnaTransport`, `Discovery`, `MediaServer`, `IpSelector`, plus
+  # the `kHasChromecastSupport` flag. Linux desktop pulls the dep
+  # but never reaches the Chromecast-only code paths
+  # (`Platform.isAndroid` gate inside `cast_sheet.dart`).
+  prism_cast: any
+
+  # Slice 10 — @visibleForTesting on buildClusterSession. meta is a
+  # transitive dep of flutter but linter requires an explicit entry.
+  meta: any
+
+  # Direct runtime deps (tight surface for slice 1)
+  just_audio: ^0.10.5
+  audio_service: ^0.18.18
+  flutter_riverpod: ^3.0.1
+  path_provider: ^2.1.5
+  audio_metadata_reader: ^1.4.2
+  cupertino_icons: ^1.0.8
+
+  # Slice 2 deps
+  cached_network_image: ^3.4.1
+  flutter_cache_manager: ^3.4.1
+  shared_preferences: ^2.3.3
+  sqflite: ^2.3.3
+  sqflite_common: ^2.5.4
+  sqflite_common_ffi: ^2.3.4
+  sqlite3: ^2.4.6
+  sqlite3_flutter_libs: ^0.5.27
+  device_info_plus: ^11.2.0
+  dio: ^5.7.0
+  path: ^1.9.0
+  # Slice 7 — palette extraction (Track B's PaletteRepository),
+  # typography fallback (google_fonts in offline-only mode), and
+  # SHA-1 hashing of art URLs for the metadata_cache palette key.
+  palette_generator: ^0.3.3+5
+  google_fonts: ^6.2.1
+  crypto: ^3.0.6
+  # Android 13+ (API 33) made POST_NOTIFICATIONS a runtime permission.
+  # `audio_service` does not ship a requester of its own, so we use
+  # `permission_handler` to prompt on first launch. Slice 1 accepts
+  # one first-launch verification miss if the user denies — playback
+  # still works, only the lockscreen transport goes dark.
+  permission_handler: ^12.0.0+1
+
+  # Slice 8 — Wi-Fi-only enforcement on the LLM model download
+  # (slice 8 §10 risk 1, §11 item 8). Used by
+  # `providers/llm_providers_mobile.dart`'s `connectivityProvider` +
+  # the gate inside `widgets/model_download_card.dart`. Linux
+  # desktop's behaviour is "no metered connection awareness" — the
+  # provider folds the platform-channel snapshot to `none` on
+  # PlatformException and the Android-only Settings section never
+  # builds, so this dep is inert on Linux.
+  connectivity_plus: ^6.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  # Slice 4 — vec0 prebuilts shipped as Flutter assets so the runtime
+  # can copy the right ABI to <support>/native/vec0.so on first launch.
+  # The directory tree under native/ mirrors Android's ABI layout for
+  # device_info_plus.supported64BitAbis, plus a linux/x86_64 entry for
+  # desktop runs. SHA256 pins live in native/README.md.
+  assets:
+    - native/android/arm64-v8a/vec0.so
+    - native/android/x86_64/vec0.so
+    - native/linux/x86_64/vec0.so
+  # Slice 7 — typography is Space Grotesk via `google_fonts`. The
+  # package fetches + caches the OFL-licensed TTF on first launch
+  # (`allowRuntimeFetching = true` in main.dart); no asset bundle
+  # entry is required. Slice 8 can promote the TTFs to bundled
+  # assets here for guaranteed offline rendering on the phone.

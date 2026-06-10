@@ -1,0 +1,45 @@
+name: prism_cast
+description: |
+  Cast & DLNA transports for Prism. SSDP discovery + UPnP
+  AVTransport v1 client + embedded Range-honoring HTTP server for
+  hi-res lossless push to DLNA receivers (Sony STR-DN1080 is the
+  reference target). Chromecast transport on Android only — gated
+  by `Platform.isAndroid` at construction time, transcodes to
+  128 kbps AAC via ffmpeg_kit_flutter_new.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.11.0
+  flutter: ">=3.27.0"
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  shelf: ^1.4.1
+  shelf_router: ^1.1.4
+  dio: ^5.7.0
+  xml: ^6.6.1
+  crypto: ^3.0.6
+  path_provider: ^2.1.5
+  prism_core: any
+  # Slice 9 §15 — Cast Flutter package pinned during doc refresh.
+  # Resolved via Context7: the only currently maintained Flutter
+  # binding to the Google Cast SDK with Android v2 embedding +
+  # `loadMedia(MediaInfo)` API. Linux desktop pulls the dep
+  # statically but never invokes it — `ChromecastTransport`'s
+  # `assert(Platform.isAndroid)` blocks construction.
+  flutter_chrome_cast: ^1.1.1
+  # FFmpeg for the AAC transcode route. The Tanersener-era
+  # `ffmpeg_kit_flutter_audio` package was sunset in early 2025;
+  # `ffmpeg_kit_flutter_new` is the maintained successor (publisher
+  # `sk3llo`) and exposes the same FFmpegKit API. Audio-only build
+  # flavor configured per the package README.
+  ffmpeg_kit_flutter_new: ^4.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
